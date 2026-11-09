@@ -2804,10 +2804,11 @@ panic.MouseButton1Click:Connect(function()
     safeCall(killSwitch)
 end)
 
--- botão de reabrir
+-- botão de reabrir (fica no canto superior direito da tela)
 local reopen = new("TextButton", {
     Size = UDim2.new(0, 46, 0, 46),
-    Position = UDim2.new(0.5, -23, 0.5, -23),
+    Position = UDim2.new(1, -58, 0, 12),
+    AnchorPoint = Vector2.new(0, 0),
     BackgroundColor3 = C.accent,
     Text = "P",
     TextColor3 = Color3.fromRGB(255, 255, 255),
@@ -2815,6 +2816,7 @@ local reopen = new("TextButton", {
     Font = Enum.Font.GothamBold,
     BorderSizePixel = 0,
     Visible = false,
+    ZIndex = 50,
 }, gui)
 new("UICorner", { CornerRadius = UDim.new(0, 12) }, reopen)
 new("UIStroke", { Color = C.stroke, Thickness = 1 }, reopen)

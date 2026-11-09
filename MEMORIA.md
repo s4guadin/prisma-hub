@@ -408,3 +408,6 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   Fly (BodyVelocity brigaria com o BodyPosition). Novos helpers:
   `raidSetHover`, `raidStopHover`, `raidCurrentIsland`, `raidIslandPart`,
   `raidMobsNear`. Versão 1.6. Sintaxe validada.
+- **Botão de reabrir no canto**: o "P" que reabre o hub saiu do centro e agora
+  fica fixo no **canto superior direito** (`Position = UDim2.new(1, -58, 0, 12)`,
+  `ZIndex = 50`).
