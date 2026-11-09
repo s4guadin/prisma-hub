@@ -361,3 +361,6 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
 - Adicionados **Auto Raid** (progressão ilha por ilha com entrega automática de
   quest) e **Kill Aura** (raio ajustável de 10–100 studs). Kill switch e
   save/load atualizados (`killAuraRange`). Sintaxe validada.
+- **Espectar** virou um único toggle: o mesmo clique liga e desliga (removido o
+  botão separado "Parar de espectar"). Trocar o jogador selecionado enquanto
+  especta muda o alvo automaticamente.

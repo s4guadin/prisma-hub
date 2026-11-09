@@ -1884,12 +1884,12 @@ end
 local function spectate(player)
     if not player or not player.Character then
         if setStatus then setStatus("Jogador indisponível", true) end
-        return
+        return false
     end
     local hum = player.Character:FindFirstChildOfClass("Humanoid")
     if not hum then
         if setStatus then setStatus("Jogador sem humanoid", true) end
-        return
+        return false
     end
 
     State.spectateTarget = player
@@ -1907,6 +1907,7 @@ local function spectate(player)
             task.wait(0.5)
         end
     end)
+    return true
 end
 
 local function stopSpectate()
@@ -1916,6 +1917,9 @@ local function stopSpectate()
     if hum and cam then
         cam.CameraSubject = hum
         cam.CameraType = Enum.CameraType.Custom
+    end
+    if UI.toggles.spectate and UI.toggles.spectate.get() then
+        UI.toggles.spectate.set(false)
     end
     if setStatus then setStatus("Espectar encerrado") end
 end
@@ -3186,7 +3190,7 @@ end
 --==================== ABA UTIL ====================
 local utilTab = makeTab("Util", 5)
 
-makeLabel(utilTab, "Clique em um jogador para selecionar. Use os botões para TP ou espectar.", true)
+makeLabel(utilTab, "Clique em um jogador para selecionar. Use o toggle para TP ou espectar.", true)
 
 makeSection(utilTab, "Jogadores")
 
@@ -3217,16 +3221,20 @@ makeButton(utilTab, "TP para jogador selecionado", function()
     end
 end)
 
-makeButton(utilTab, "Espectar jogador selecionado", function()
-    if not State.selectedPlayer then
-        setStatus("Clique em um jogador na lista primeiro", true)
-        return
+UI.toggles.spectate = makeToggle(utilTab, "Espectar jogador selecionado", false, function(on)
+    if on then
+        local p = State.selectedPlayer
+        if not p then
+            setStatus("Clique em um jogador na lista primeiro", true)
+            if UI.toggles.spectate then UI.toggles.spectate.set(false) end
+            return
+        end
+        if not spectate(p) then
+            if UI.toggles.spectate then UI.toggles.spectate.set(false) end
+        end
+    else
+        stopSpectate()
     end
-    spectate(State.selectedPlayer)
-end)
-
-makeButton(utilTab, "Parar de espectar", function()
-    stopSpectate()
 end)
 
 UI.toggles.antiAfk = makeToggle(utilTab, "Anti-AFK", true, function(on)
@@ -3307,6 +3315,9 @@ UI.refreshPlayers = function()
                 State.selectedPlayer = p
                 if UI.playerLabel then
                     UI.playerLabel.Text = "Selecionado: " .. p.Name
+                end
+                if UI.toggles.spectate and UI.toggles.spectate.get() then
+                    spectate(p)
                 end
                 setStatus("Jogador selecionado: " .. p.Name)
             end)
