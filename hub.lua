@@ -229,6 +229,8 @@ local AURA = {
     hooked = false,
     combo = 0,
     lastWeapon = 0,
+    lastSim = 0,
+    simOk = nil,
     lastHitIdWarn = 0,
 }
 
@@ -1428,8 +1430,10 @@ end
 
 --==================== KILL AURA ====================
 -- Puxa e mata todos os inimigos dentro do raio ao redor do personagem.
--- Usa os remotes RE/RegisterAttack + RE/RegisterHit para aplicar dano em todos
--- de uma vez (é isso que dá o efeito de "instant kill"), com fallback para arma.
+-- O "instant kill" usa o mesmo método dos hubs públicos:
+--   sethiddenproperty(LP, "SimulationRadius", math.huge) + Humanoid.Health = 0
+-- Isso faz o cliente simular os mobs e a morte replicar no servidor.
+-- Os remotes RE/RegisterAttack + RE/RegisterHit ficam como reforço/fallback.
 
 local function getNetRemotes()
     local ok, attack, hit = pcall(function()
@@ -1440,6 +1444,34 @@ local function getNetRemotes()
     end)
     if ok then return attack, hit end
     return nil, nil
+end
+
+-- Aumenta o raio de simulação do cliente para o servidor aceitar a morte dos mobs.
+local function forceSimulationRadius()
+    local okAny = false
+
+    local setSim = setsimulationradius or (getgenv and getgenv().setsimulationradius)
+    if setSim then
+        okAny = pcall(function() setSim(math.huge) end) or okAny
+    end
+
+    local sethidden = sethiddenproperty or (getgenv and getgenv().sethiddenproperty)
+    if sethidden then
+        okAny = pcall(function()
+            sethidden(LP, "SimulationRadius", math.huge)
+            sethidden(LP, "MaxSimulationRadius", math.huge)
+        end) or okAny
+
+        if not okAny then
+            okAny = pcall(function()
+                sethidden(LP, "SimulationRadius", 112412400000)
+                sethidden(LP, "MaxSimulationRadius", 112412400000)
+            end)
+        end
+    end
+
+    AURA.simOk = okAny
+    return okAny
 end
 
 -- Captura um hitId válido que o próprio jogo manda ao atacar (anti-cheat novo).
@@ -1504,11 +1536,20 @@ end
 
 local function killAuraLoop()
     installHitIdCapture()
+    forceSimulationRadius()
+
     while State.killAura do
         local ok = pcall(function()
             if not isAlive() then return end
             local hrp = getHRP()
             if not hrp then return end
+
+            -- o SimulationRadius pode resetar; renova de tempos em tempos
+            local now = os.clock()
+            if now - AURA.lastSim >= 0.5 then
+                AURA.lastSim = now
+                forceSimulationRadius()
+            end
 
             local radius = CONFIG.killAuraRange
             local targets = {}
@@ -1521,6 +1562,7 @@ local function killAuraLoop()
                     if d <= radius then
                         targets[#targets + 1] = {
                             mob = mob,
+                            hum = mhum,
                             part = mob:FindFirstChild("Head") or mhrp,
                         }
                         boostTarget(mob)
@@ -1534,11 +1576,22 @@ local function killAuraLoop()
             end
 
             if #targets > 0 then
+                -- MÉTODO DOS HUBS PÚBLICOS: mata direto pelo Humanoid
+                if AURA.simOk then
+                    for _, t in ipairs(targets) do
+                        pcall(function()
+                            if t.hum and t.hum.Parent and t.hum.Health > 0 then
+                                t.hum.Health = 0
+                            end
+                        end)
+                    end
+                end
+
+                -- reforço: remotes de hit (dano de arma em todos de uma vez)
                 killAuraHit(targets)
 
-                -- sem hitId capturado, reforça com a arma a cada 0.1s
-                local now = os.clock()
-                if AURA.hitId == nil and now - AURA.lastWeapon >= 0.1 then
+                -- último fallback: ataque normal com a arma
+                if not AURA.simOk and AURA.hitId == nil and now - AURA.lastWeapon >= 0.1 then
                     AURA.lastWeapon = now
                     attackOnce()
                 end
@@ -3135,8 +3188,10 @@ UI.toggles.killAura = makeToggle(combatTab, "Kill Aura instantâneo", false, fun
     State.killAura = on
     if on then
         installHitIdCapture()
+        forceSimulationRadius()
         task.spawn(killAuraLoop)
-        setStatus("Kill aura instantâneo ligado (raio " .. CONFIG.killAuraRange .. " studs)")
+        local modo = AURA.simOk and "morte direta" or "remotes de hit"
+        setStatus("Kill aura instantâneo ligado (" .. modo .. ", raio " .. CONFIG.killAuraRange .. " studs)")
     else
         setStatus("Kill aura desligado")
     end
@@ -3146,7 +3201,7 @@ UI.sliders.killAuraRange = makeSlider(combatTab, "Raio do Kill Aura (studs)", 10
     CONFIG.killAuraRange = v
 end)
 
-makeLabel(combatTab, "Kill Aura instantâneo usa os remotes de hit para matar todos no raio de uma vez. Não afeta jogadores.", true)
+makeLabel(combatTab, "Kill Aura instantâneo usa sethiddenproperty(SimulationRadius) + Humanoid.Health = 0, o mesmo método dos hubs públicos. Não afeta jogadores.", true)
 
 makeSection(combatTab, "Auto stats")
 

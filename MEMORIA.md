@@ -202,11 +202,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
 - **Auto Raid (ilha por ilha)**: usa a tabela de quests do mar atual, inicia a
   quest, entrega via `CommF_:InvokeServer("CompleteQuest")` e, quando o nível
   sobe, troca para o próximo mob/ilha automaticamente. Reaproveita o Auto Farm.
-- **Kill Aura instantâneo**: usa `RE/RegisterAttack` + `RE/RegisterHit` do
-  `ReplicatedStorage.Modules.Net` para aplicar dano em todos os inimigos do raio
-  na mesma hora, com `hitId` capturado via `hookmetamethod` (anti-cheat novo) e
-  fallback para a assinatura antiga + ataque normal. Raio ajustável (10–100
-  studs, padrão 30). Não afeta jogadores.
+- **Kill Aura instantâneo**: usa o método dos hubs públicos
+  `sethiddenproperty(LP, "SimulationRadius", math.huge)` +
+  `sethiddenproperty(LP, "MaxSimulationRadius", math.huge)` + `Humanoid.Health = 0`
+  em todos os inimigos do raio. O cliente passa a simular os mobs e a morte
+  replica no servidor. Como reforço, dispara `RE/RegisterAttack` +
+  `RE/RegisterHit` (com `hitId` capturado por `hookmetamethod`) e, se o executor
+  não tiver `sethiddenproperty`, cai para os remotes + ataque normal. Raio
+  ajustável (10–100 studs, padrão 30). Não afeta jogadores.
 - **UI reorganizada em 7 abas**: Farm, Boss, Combat, ESP, Util, Ilhas, Config.
   - Largura das abas: 58px, padding 3, texto 12 (cabe nas 424px úteis).
 - **ESP**: jogadores, bosses, frutas e baús. `Highlight` + `BillboardGui` com
@@ -367,7 +370,9 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
 - **Espectar** virou um único toggle: o mesmo clique liga e desliga (removido o
   botão separado "Parar de espectar"). Trocar o jogador selecionado enquanto
   especta muda o alvo automaticamente.
-- **Kill Aura** agora é **instantâneo**: dispara `RE/RegisterAttack` +
-  `RE/RegisterHit` para todos os inimigos do raio (3 hits por ciclo a cada 0.02s),
-  capturando o `hitId` real do jogo via `hookmetamethod`. Sem hook disponível,
-  cai para a assinatura antiga do remote e, por último, para o ataque normal.
+- **Kill Aura** agora é **instantâneo**: usa `sethiddenproperty` para elevar
+  `SimulationRadius`/`MaxSimulationRadius` ao infinito e zera o
+  `Humanoid.Health` de todos os inimigos do raio (mesmo método de hubs públicos
+  como DragonHUB/Btteam/RimuraHub). Reforço com `RE/RegisterAttack` +
+  `RE/RegisterHit` e fallback para ataque normal quando `sethiddenproperty` não
+  existe no executor.
