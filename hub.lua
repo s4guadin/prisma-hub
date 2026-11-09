@@ -1,12 +1,13 @@
 --[[
-    Prisma Hub — 1.7
+    Prisma Hub — 1.8
     Arquivo único. PC. Sem key. Anti-detecção básica.
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
-    Novidades 1.7: ESP (jogadores/bosses/frutas/baús), notificador de frutas,
+    Novidades 1.8: ESP (jogadores/bosses/frutas/baús), notificador de frutas,
     lista + TP de frutas, Auto Quest (1º/2º/3º mar), Auto Raid pairando alto e
     matando na hora, Auto Skills Z/X/C, Kill Aura instantâneo, ataque rápido,
-    Auto Stats, server hop, auto rejoin, fly, noclip e pulo infinito.
+    Auto Stats, server hop, auto rejoin, fly, noclip, pulo infinito e
+    auto guardar frutas (confere o espaço antes de guardar).
     UI estilo hub genérico: sidebar, tema escuro e acento violeta.
 ]]
 
@@ -34,7 +35,7 @@ local bootOk, bootErr = pcall(function()
 --==================== CONFIG ====================
 local CONFIG = {
     name = "Prisma Hub",
-    version = "1.7",
+    version = "1.8",
 
     jitter = 0.30,
     maxErrors = 3,
@@ -196,6 +197,11 @@ local State = {
     fruitSpawnApprox = false,
     fruitRadarConn = nil,
     fruitRadarGrace = 0,
+    fruitAutoStore = false,
+    fruitStoreCapacity = 1,
+    fruitStoreRunning = false,
+    fruitStoreBusy = false,
+    fruitStoreWarned = {},
 
     -- combate
     skillZ = false,
@@ -1181,6 +1187,209 @@ local function getFruitsCached()
     if now - fruitCache.time < 0.5 then return fruitCache.list end
     fruitCache = { time = now, list = collectFruits() }
     return fruitCache.list
+end
+
+--==================== GUARDAR FRUTAS ====================
+-- O jogo guarda 1 cópia de cada fruta por padrão; cada "+1 Fruit Storage"
+-- adiciona um slot para todas as frutas. O cliente não expõe esse limite, então
+-- o usuário ajusta "slots por fruta" na UI. A quantidade guardada vem de
+-- getInventoryFruits (uma entrada por cópia). Se o servidor recusar mesmo com
+-- vaga na conta, o hub reduz a capacidade aprendida.
+local function fruitBaseKey(name)
+    local s = tostring(name or "")
+    s = s:gsub("%s*[Ff][Rr][Uu][Ii][Tt]%s*$", "")
+    s = string.lower(s)
+    return (s:match("^([^%-:]+)") or s)
+end
+
+local function fruitDisplayName(tool)
+    local s = tostring(tool and tool.Name or "?")
+    s = s:gsub("%s*[Ff][Rr][Uu][Ii][Tt]%s*$", "")
+    s = s:match("^([^%-:]+)") or s
+    return s
+end
+
+local function fruitStoreName(tool)
+    local name
+    local ok, orig = pcall(function() return tool:GetAttribute("OriginalName") end)
+    if ok and type(orig) == "string" and #orig > 0 then
+        name = orig
+    else
+        name = tostring(tool.Name)
+    end
+    name = name:gsub("%s*[Ff][Rr][Uu][Ii][Tt]%s*$", "")
+    if string.find(name, "-", 1, true) then return name end
+    local base = name:match("^([^%-:]+)") or name
+    return base .. "-" .. base
+end
+
+-- Só conta ferramentas que realmente são fruta na mochila. Evita pegar
+-- "Dragon Talon" (melee) ou outros itens com nome de fruta.
+local function isBackpackFruit(tool)
+    if not tool or not tool:IsA("Tool") then return false end
+    local name = tostring(tool.Name)
+    if isGenericFruitName(name) then return false end
+
+    local okTip, tip = pcall(function() return tool.ToolTip end)
+    if okTip and tip == "Blox Fruit" then return true end
+    if okTip and tip == "" then
+        -- algumas frutas no chão/mochila vêm com ToolTip vazio (ex. "Rocket-Rocket")
+        local tbase = string.lower(name:match("^([^%-%s]+)") or name)
+        if FRUIT_NAMES[tbase] and (string.find(name, "-", 1, true) or not string.find(name, "%s")) then
+            return true
+        end
+    end
+
+    local okOrig, orig = pcall(function() return tool:GetAttribute("OriginalName") end)
+    if okOrig and type(orig) == "string" and #orig > 0 and not isGenericFruitName(orig) then
+        local ol = string.lower(orig)
+        if string.find(ol, "fruit", 1, true) then return true end
+        local obase = ol:match("^([^%-%s]+)") or ol
+        if string.find(orig, "-", 1, true) and FRUIT_NAMES[obase] then return true end
+    end
+
+    if string.find(string.lower(name), "fruit", 1, true) then return true end
+    local base = string.lower(name:match("^([^%-%s]+)") or name)
+    if string.find(name, "-", 1, true) and FRUIT_NAMES[base] then return true end
+    return false
+end
+
+local fruitInvCache = { time = 0, counts = nil }
+
+local function getStoredFruitCounts(force)
+    local now = os.clock()
+    if not force and fruitInvCache.counts and now - fruitInvCache.time < 2 then
+        return fruitInvCache.counts
+    end
+    local ok, inv = pcall(function()
+        return ReplicatedStorage.Remotes.CommF_:InvokeServer("getInventoryFruits")
+    end)
+    if not ok or type(inv) ~= "table" then
+        fruitInvCache = { time = now, counts = nil }
+        return nil
+    end
+
+    local counts = {}
+    for k, item in pairs(inv) do
+        local n = nil
+        local amount = 1
+        if type(item) == "table" then
+            n = item.Name or item.name or item[1]
+            if not n and type(k) == "string" then n = k end
+            if tonumber(item.Count) then
+                amount = math.max(1, math.floor(tonumber(item.Count)))
+            end
+        elseif type(item) == "string" then
+            n = item
+        elseif type(item) == "number" and type(k) == "string" then
+            -- formato mapa: { ["Rocket-Rocket"] = 2 }
+            n = k
+            amount = math.max(1, math.floor(item))
+        end
+        if type(n) == "table" then n = n[1] end
+        if type(n) == "string" then
+            local key = fruitBaseKey(n)
+            counts[key] = (counts[key] or 0) + amount
+        end
+    end
+    fruitInvCache = { time = now, counts = counts }
+    return counts
+end
+
+-- tenta guardar e confirma se a ferramenta saiu da mochila
+local function tryStoreFruit(tool)
+    local backpack = LP:FindFirstChild("Backpack")
+    if not backpack or tool.Parent ~= backpack then return "fail" end
+    local storeName = fruitStoreName(tool)
+
+    pcall(function()
+        ReplicatedStorage.Remotes.CommF_:InvokeServer("StoreFruit", storeName, tool)
+    end)
+    task.wait(0.45)
+    if tool.Parent ~= backpack then return "stored" end
+
+    -- algumas versões aceitam só o nome
+    pcall(function()
+        ReplicatedStorage.Remotes.CommF_:InvokeServer("StoreFruit", storeName)
+    end)
+    task.wait(0.35)
+    if tool.Parent ~= backpack then return "stored" end
+    return "fail"
+end
+
+local function fruitStorePass(manual)
+    if State.fruitStoreBusy then return 0, 0, 0 end
+    State.fruitStoreBusy = true
+
+    local stored, skipped, failed = 0, 0, 0
+    local backpack = LP:FindFirstChild("Backpack")
+
+    -- primeiro monta a lista: sem fruta na mochila nem chama o remote
+    local fruits = {}
+    if backpack then
+        for _, tool in ipairs(backpack:GetChildren()) do
+            if isBackpackFruit(tool) then
+                table.insert(fruits, tool)
+            end
+        end
+    end
+
+    local capacity = math.max(1, math.floor(tonumber(State.fruitStoreCapacity) or 1))
+    local counts = #fruits > 0 and getStoredFruitCounts(true) or nil
+
+    for _, tool in ipairs(fruits) do
+        if tool.Parent == backpack then
+            local key = fruitBaseKey(tool.Name)
+            local have = counts and (counts[key] or 0) or nil
+
+            if have and have >= capacity then
+                skipped = skipped + 1
+                if not State.fruitStoreWarned[key] then
+                    State.fruitStoreWarned[key] = true
+                    notify("Sem espaço para " .. fruitDisplayName(tool) .. " (" .. have .. "/" .. capacity .. ")", 5)
+                end
+            else
+                local result = tryStoreFruit(tool)
+                if result == "stored" then
+                    stored = stored + 1
+                    if counts then counts[key] = (counts[key] or 0) + 1 end
+                    State.fruitStoreWarned[key] = nil
+                    local nowHave = counts and counts[key] or "?"
+                    notify("Fruta guardada: " .. fruitDisplayName(tool) .. " (" .. tostring(nowHave) .. "/" .. capacity .. ")", 4)
+                else
+                    failed = failed + 1
+                    -- pensávamos que havia vaga, mas o servidor recusou:
+                    -- aprende a capacidade real para não tentar de novo à toa
+                    if have and have < capacity then
+                        State.fruitStoreCapacity = math.max(1, have)
+                        if UI.sliders.fruitStoreCapacity then
+                            UI.sliders.fruitStoreCapacity.set(State.fruitStoreCapacity)
+                        end
+                    end
+                    if not State.fruitStoreWarned[key] then
+                        State.fruitStoreWarned[key] = true
+                        notify("Não consegui guardar " .. fruitDisplayName(tool) .. " (sem espaço)", 5)
+                    end
+                end
+            end
+        end
+    end
+
+    State.fruitStoreBusy = false
+    if manual and setStatus then
+        setStatus("Guardar frutas: " .. stored .. " guardada(s), " .. skipped .. " sem espaço, " .. failed .. " falhou")
+    end
+    return stored, skipped, failed
+end
+
+local function fruitStoreLoop()
+    if State.fruitStoreRunning then return end
+    State.fruitStoreRunning = true
+    while State.fruitAutoStore do
+        pcall(function() fruitStorePass(false) end)
+        task.wait(1.5)
+    end
+    State.fruitStoreRunning = false
 end
 
 local chestCache = { time = 0, list = {} }
@@ -2709,6 +2918,7 @@ local function killSwitch()
     State.killAura = false
     State.autoStats = false
     State.fruitNotify = false
+    State.fruitAutoStore = false
     State.espPlayers = false
     State.espFruits = false
     State.espChests = false
@@ -2745,6 +2955,7 @@ local function saveConfig()
         instantFarm = State.instantFarm,
         flySpeed = CONFIG.flySpeed,
         statTarget = State.statTarget,
+        fruitStoreCapacity = State.fruitStoreCapacity,
     }
 
     if not writefile then
@@ -2798,6 +3009,9 @@ local function loadConfig()
     if type(data.statTarget) == "string" then
         State.statTarget = data.statTarget
         if UI.statBtn then UI.statBtn.Text = "Atributo: " .. State.statTarget end
+    end
+    if tonumber(data.fruitStoreCapacity) and UI.sliders.fruitStoreCapacity then
+        UI.sliders.fruitStoreCapacity.set(tonumber(data.fruitStoreCapacity))
     end
 
     notify("Config carregada")
@@ -3978,6 +4192,33 @@ makeButton(espTab, "Resetar timer de spawn", function()
 end)
 
 makeLabel(espTab, "Spawn natural: ~60 min (45 min no fim de semana) e a fruta some em 20 min. O timer é estimado pelos spawns detectados.", true)
+
+makeSection(espTab, "Guardar frutas")
+
+UI.toggles.fruitAutoStore = makeToggle(espTab, "Guardar fruta automaticamente", false, function(on)
+    State.fruitAutoStore = on
+    State.fruitStoreWarned = {}
+    if on then
+        task.spawn(fruitStoreLoop)
+        setStatus("Auto guardar fruta ligado (" .. State.fruitStoreCapacity .. " slot(s) por fruta)")
+    else
+        setStatus("Auto guardar fruta desligado")
+    end
+end)
+
+UI.sliders.fruitStoreCapacity = makeSlider(espTab, "Espaço por fruta (slots)", 1, 50, 1, function(v)
+    State.fruitStoreCapacity = math.max(1, math.floor(tonumber(v) or 1))
+    State.fruitStoreWarned = {}
+end)
+
+makeButton(espTab, "Guardar frutas da mochila agora", function()
+    local stored, skipped, failed = fruitStorePass(true)
+    if stored == 0 and skipped == 0 and failed == 0 then
+        setStatus("Nenhuma fruta na mochila")
+    end
+end)
+
+makeLabel(espTab, "O jogo não informa o espaço no cliente. Ajuste os slots por fruta (padrão 1; +1 por Fruit Storage). O hub conta o que já está guardado via getInventoryFruits e só guarda se houver vaga.", true)
 
 makeButton(espTab, "Atualizar lista de frutas", function()
     if UI.refreshFruits then UI.refreshFruits() end

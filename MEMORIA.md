@@ -177,14 +177,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
 | Arquivo | O que é |
 |---|---|
 | `MEMORIA.md` | Este documento. Ler antes de abrir código. |
-| `hub.lua` | Prisma Hub 1.7 (arquivo único). |
+| `hub.lua` | Prisma Hub 1.8 (arquivo único). |
 | `teste.lua` | Teste mínimo de GUI (quadrado azul "GUI OK"). |
 
 ## 8. Estado atual
 
 - Planejamento: **completo** (este arquivo).
-- Código: **Fase 1.7** em `hub.lua`.
-- Versão atual: `1.7` (Prisma Hub).
+- Código: **Fase 1.8** em `hub.lua`.
+- Versão atual: `1.8` (Prisma Hub).
 
 ### Mudanças da 1.4 (pacote "Tudo" inspirado em hubs públicos)
 - **Renomeado para Prisma Hub** (`CONFIG.name`, título da janela, botão de reabrir "P").
@@ -238,6 +238,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
   Label na aba ESP + botão "Resetar timer de spawn".
 - **Lista de frutas + TP**: aba ESP lista frutas, teleporta e tem "Puxar fruta"
   (grab client-side do Handle).
+- **Auto guardar fruta**: varre a mochila (`Backpack`) e guarda frutas via
+  `CommF_:InvokeServer("StoreFruit", nome, tool)`. Antes de guardar, conta
+  quantas cópias daquela fruta já estão guardadas com `getInventoryFruits` e
+  compara com "Espaço por fruta (slots)" (padrão 1, +1 por Fruit Storage).
+  Se estiver cheio, não guarda e avisa uma vez. Se o servidor recusar mesmo
+  com vaga, o hub reduz a capacidade aprendida. Também há o botão
+  "Guardar frutas da mochila agora". Só olha a mochila, nunca a fruta
+  equipada no personagem.
 - **Auto Quest (1º/2º/3º mar)**: detecta o mar pelo `PlaceId` e usa a tabela de
   quests correspondente (27 do 1º mar, 22 do 2º e 37 do 3º). Cada entrada tem
   nível, mob e remote (`CommF_:InvokeServer("StartQuest", remote, id)`). Lê
@@ -328,6 +336,10 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   "Ataque rápido" reduz o delay; "Auto Stats" deve gastar pontos no atributo escolhido.
 - Aba ESP → ligar um destaque por vez. Se o FPS cair, desligar "ESP baús" (varredura do mapa).
   Lista de frutas → selecionar → TP/Puxar.
+- Aba ESP → "Guardar frutas": ajustar "Espaço por fruta" para o total real (padrão 1;
+  +1 por Fruit Storage). Com fruta na mochila, "Guardar frutas da mochila agora" deve
+  guardar só se houver vaga; com espaço cheio deve avisar e não guardar.
+  O toggle automático repete a checagem a cada 1,5s.
 - Aba Util → fly (WASD/Space/Ctrl), noclip, pulo infinito, server hop e auto rejoin.
 - Aba Util → clicar no jogador → só seleciona. Usar botão de TP ou Espectar.
 - Aba Ilhas → cada botão deve teleportar; viagem de mar via remote.
@@ -435,4 +447,12 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   Adicionado timer estimado na aba ESP: escuta `Remotes.RadarNotify` para
   alerta imediato, assume ciclo de 60 min (45 min no fim de semana) e calibra
   pela média dos intervalos observados. Botão "Resetar timer de spawn".
+  Sintaxe validada.
+- **Auto guardar fruta (1.8)**: `fruitBaseKey`, `fruitDisplayName`,
+  `fruitStoreName`, `isBackpackFruit`, `getStoredFruitCounts`, `tryStoreFruit`,
+  `fruitStorePass` e `fruitStoreLoop`. Conta as frutas guardadas por tipo via
+  `getInventoryFruits`, compara com `State.fruitStoreCapacity` (slider "Espaço
+  por fruta", 1–50, salvo no config) e só chama `StoreFruit` se houver vaga.
+  Verifica se o tool saiu da mochila para confirmar; se o servidor recusar com
+  vaga na conta, diminui a capacidade aprendida. Botão manual na aba ESP.
   Sintaxe validada.
