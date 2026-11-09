@@ -112,7 +112,7 @@ Não é bypass mágico. Reduz padrões detectáveis:
 ### FASE 2 — Farm essencial
 - [ ] Auto farm level
 - [ ] Auto farm money
-- [x] Auto quest parcial (aceitar + farmar; entrega manual) — 1º mar
+- [x] Auto quest parcial (aceitar + farmar; entrega manual) — 1º/2º/3º mar
 - [x] Teleport list completa
 - [ ] Seletor de mar (primeiro/segundo/terceiro)
 
@@ -200,10 +200,11 @@ Não é bypass mágico. Reduz padrões detectáveis:
 - **Notificador de frutas**: avisa quando uma fruta nova aparece no chão.
 - **Lista de frutas + TP**: aba ESP lista frutas, teleporta e tem "Puxar fruta"
   (grab client-side do Handle).
-- **Auto Quest (1º mar)**: tabela de 18 quests com level, mob e remote
-  (`CommF_:InvokeServer("StartQuest", remote, id)`). Lê `Player.Data.Level`,
-  escolhe a melhor quest disponível e liga o farm no mob. Entrega é manual
-  (botão "Tentar entregar quest" + falar com o NPC).
+- **Auto Quest (1º/2º/3º mar)**: detecta o mar pelo `PlaceId` e usa a tabela de
+  quests correspondente (27 do 1º mar, 22 do 2º e 37 do 3º). Cada entrada tem
+  nível, mob e remote (`CommF_:InvokeServer("StartQuest", remote, id)`). Lê
+  `Player.Data.Level`, escolhe a melhor quest disponível e liga o farm no mob.
+  Entrega é manual (botão "Tentar entregar quest" + falar com o NPC).
 - **Auto Skills Z/X/C**: usa `Tool.RemoteFunction:InvokeServer` da arma equipada,
   com cooldowns separados. Z manda CFrame; C tem fallback por VirtualInputManager.
   Só dispara com alvo vivo a até 60 studs.
@@ -282,7 +283,7 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
 ### Pontos a testar
 - Aba Farm → "Atualizar lista de mobs" → só deve listar mobs matáveis do `Workspace.Enemies`.
 - Clicar no mob → só seleciona. "TP para mob selecionado" teleporta. Ligar Auto Farm → ele vai, reequipa a arma e ataca.
-- Aba Farm → ligar "Auto Quest (1º mar)" → confere se o nível é lido em `Player.Data.Level`,
+- Aba Farm → ligar "Auto Quest (todos os mares)" → confere se o nível é lido em `Player.Data.Level`,
   se a quest inicia (`StartQuest`) e se o farm vai no mob certo. Entrega é manual.
 - Aba Boss → "Atualizar lista de bosses" → deve listar bosses vivos. "TP para boss selecionado" ou Auto Boss.
 - Aba Combat → Auto Skills Z/X/C com uma arma que tenha `RemoteFunction`; conferir cooldowns.
@@ -323,7 +324,7 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   `ReplicatedStorage.Remotes.CommF_`, `StartQuest`, padrão de skills
   `Tool.RemoteFunction:InvokeServer("Z"/"X")` e frutas como Tool no Workspace.
 - Implementado o pacote "Tudo" na 1.4: ESP (jogadores/bosses/frutas/baús),
-  notificador de frutas, lista + TP + grab de frutas, Auto Quest do 1º mar,
+  notificador de frutas, lista + TP + grab de frutas, Auto Quest do 1º/2º/3º mar,
   Auto Skills Z/X/C, ataque rápido, Auto Stats, fly, noclip, pulo infinito,
   server hop, auto rejoin e reconectar.
 - UI passou de 5 para 7 abas (Farm, Boss, Combat, ESP, Util, Ilhas, Config),
@@ -334,3 +335,13 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   (sidebar, tema escuro, acento violeta). Publicado no GitHub (`prisma-hub`).
 - Pendente: teste em jogo da 1.4 (principalmente ESP, Auto Quest, skills,
   fly e server hop).
+
+### 2026-11-09
+- Auto Quest expandido para **1º, 2º e 3º mar**. Tabelas por mar (27/22/37
+  entradas), seleção automática pelo `PlaceId` (`CURRENT_SEA`). Removido o
+  bloqueio que impedia ligar a feature fora do 1º mar.
+- Label "Mar detectado" adicionada na aba Farm.
+- Teleporte com deadline maior para distâncias longas (até 180s), ajudando o
+  farm em ilhas distantes do 2º/3º mar.
+- Referência das quests: repositório aberto `Sankeurr/OpenSource-Blox-Fruits-Script`.
+- Sintaxe validada (`OK: sintaxe valida`).

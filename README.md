@@ -8,7 +8,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/s4guadin/prisma-hub/m
 
 ## Recursos
 
-- **Farm** — lista apenas mobs matáveis de `Workspace.Enemies`, clique para selecionar, Auto Farm, Auto Quest (1º mar), ataque rápido.
+- **Farm** — lista apenas mobs matáveis de `Workspace.Enemies`, clique para selecionar, Auto Farm, Auto Quest (1º/2º/3º mar), ataque rápido.
 - **Boss** — aba separada com bosses vivos no servidor, TP e Auto Boss.
 - **Combat** — Auto Skills Z/X/C (via `Tool.RemoteFunction`), Auto Ataque, Auto Stats com atributo ciclável.
 - **ESP** — jogadores, bosses, frutas e baús (`Highlight` + `BillboardGui` com nome e distância).

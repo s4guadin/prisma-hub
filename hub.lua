@@ -4,7 +4,7 @@
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
     Novidades 1.4: ESP (jogadores/bosses/frutas/baús), notificador de frutas,
-    lista + TP de frutas, Auto Quest (1º mar), Auto Skills Z/X/C, ataque rápido,
+    lista + TP de frutas, Auto Quest (1º/2º/3º mar), Auto Skills Z/X/C, ataque rápido,
     Auto Stats, server hop, auto rejoin, fly, noclip e pulo infinito.
     UI estilo hub genérico: sidebar, tema escuro e acento violeta.
 ]]
@@ -406,7 +406,7 @@ local function teleport(pos, label, silent)
     end
 
     local speed = 300
-    local deadline = os.clock() + math.clamp(dist / speed + 4, 5, 60)
+    local deadline = os.clock() + math.clamp(dist / speed + 4, 5, 180)
     local lastStatus = 0
 
     setNoclip(true)
@@ -1096,27 +1096,106 @@ local function fruitNotifyLoop()
 end
 
 --==================== AUTO QUEST ====================
--- Apenas primeiro mar. O mob precisa existir em Workspace.Enemies.
+-- Tabelas por mar. O mob precisa existir em Workspace.Enemies.
 local QUESTS = {
-    { level = 5,   mob = "Bandit",              remote = "BanditQuest1",   questId = 1 },
-    { level = 10,  mob = "Monkey",              remote = "JungleQuest",    questId = 1 },
-    { level = 20,  mob = "Gorilla",             remote = "JungleQuest",    questId = 2 },
-    { level = 30,  mob = "Pirate",              remote = "BuggyQuest1",    questId = 1 },
-    { level = 45,  mob = "Brute",               remote = "BuggyQuest1",    questId = 2 },
-    { level = 60,  mob = "Desert Bandit",       remote = "DesertQuest",    questId = 1 },
-    { level = 75,  mob = "Desert Officer",      remote = "DesertQuest",    questId = 2 },
-    { level = 90,  mob = "Snow Bandit",         remote = "SnowQuest",      questId = 1 },
-    { level = 105, mob = "Snowman",             remote = "SnowQuest",      questId = 2 },
-    { level = 120, mob = "Chief Petty Officer", remote = "MarineQuest2",   questId = 1 },
-    { level = 150, mob = "Sky Bandit",          remote = "SkyQuest",       questId = 1 },
-    { level = 175, mob = "Toga Warrior",        remote = "ColosseumQuest", questId = 1 },
-    { level = 200, mob = "Gladiator",           remote = "ColosseumQuest", questId = 2 },
-    { level = 225, mob = "Military Soldier",    remote = "MagmaQuest",     questId = 1 },
-    { level = 250, mob = "Military Spy",        remote = "MagmaQuest",     questId = 2 },
-    { level = 275, mob = "God's Guard",         remote = "SkyExp1Quest",   questId = 1 },
-    { level = 300, mob = "Shanda",              remote = "SkyExp1Quest",   questId = 2 },
-    { level = 375, mob = "Galley Pirate",       remote = "FountainQuest",  questId = 1 },
+    [1] = {
+        { level = 1,   mob = "Bandit",              remote = "BanditQuest1",   questId = 1 },
+        { level = 10,  mob = "Monkey",              remote = "JungleQuest",    questId = 1 },
+        { level = 15,  mob = "Gorilla",             remote = "JungleQuest",    questId = 2 },
+        { level = 30,  mob = "Pirate",              remote = "BuggyQuest1",    questId = 1 },
+        { level = 40,  mob = "Brute",               remote = "BuggyQuest1",    questId = 2 },
+        { level = 60,  mob = "Desert Bandit",       remote = "DesertQuest",    questId = 1 },
+        { level = 75,  mob = "Desert Officer",      remote = "DesertQuest",    questId = 2 },
+        { level = 90,  mob = "Snow Bandit",         remote = "SnowQuest",      questId = 1 },
+        { level = 100, mob = "Snowman",             remote = "SnowQuest",      questId = 2 },
+        { level = 120, mob = "Chief Petty Officer", remote = "MarineQuest2",   questId = 1 },
+        { level = 130, mob = "Vice Admiral",        remote = "MarineQuest2",   questId = 2 },
+        { level = 150, mob = "Sky Bandit",          remote = "SkyQuest",       questId = 1 },
+        { level = 175, mob = "Dark Master",         remote = "SkyQuest",       questId = 2 },
+        { level = 190, mob = "Prisoner",            remote = "PrisonerQuest",  questId = 1 },
+        { level = 210, mob = "Dangerous Prisoner",  remote = "PrisonerQuest",  questId = 2 },
+        { level = 250, mob = "Toga Warrior",        remote = "ColosseumQuest", questId = 1 },
+        { level = 275, mob = "Gladiator",           remote = "ColosseumQuest", questId = 2 },
+        { level = 300, mob = "Military Soldier",    remote = "MagmaQuest",     questId = 1 },
+        { level = 325, mob = "Military Spy",        remote = "MagmaQuest",     questId = 2 },
+        { level = 375, mob = "Fishman Warrior",     remote = "FishmanQuest",   questId = 1 },
+        { level = 400, mob = "Fishman Commando",    remote = "FishmanQuest",   questId = 2 },
+        { level = 450, mob = "God's Guard",         remote = "SkyExp1Quest",   questId = 1 },
+        { level = 475, mob = "Shanda",              remote = "SkyExp1Quest",   questId = 2 },
+        { level = 525, mob = "Royal Squad",         remote = "SkyExp2Quest",   questId = 1 },
+        { level = 550, mob = "Royal Soldier",       remote = "SkyExp2Quest",   questId = 2 },
+        { level = 625, mob = "Galley Pirate",       remote = "FountainQuest",  questId = 1 },
+        { level = 650, mob = "Galley Captain",      remote = "FountainQuest",  questId = 2 },
+    },
+    [2] = {
+        { level = 700,  mob = "Raider",             remote = "Area1Quest",        questId = 1 },
+        { level = 725,  mob = "Mercenary",          remote = "Area1Quest",        questId = 2 },
+        { level = 775,  mob = "Swan Pirate",        remote = "Area2Quest",        questId = 1 },
+        { level = 800,  mob = "Factory Staff",      remote = "Area2Quest",        questId = 2 },
+        { level = 875,  mob = "Marine Lieutenant",  remote = "MarineQuest3",      questId = 1 },
+        { level = 900,  mob = "Marine Captain",     remote = "MarineQuest3",      questId = 2 },
+        { level = 950,  mob = "Zombie",             remote = "ZombieQuest",       questId = 1 },
+        { level = 975,  mob = "Vampire",            remote = "ZombieQuest",       questId = 2 },
+        { level = 1000, mob = "Snow Trooper",       remote = "SnowMountainQuest", questId = 1 },
+        { level = 1050, mob = "Winter Warrior",     remote = "SnowMountainQuest", questId = 2 },
+        { level = 1100, mob = "Lab Subordinate",    remote = "IceSideQuest",      questId = 1 },
+        { level = 1125, mob = "Horned Warrior",     remote = "IceSideQuest",      questId = 2 },
+        { level = 1175, mob = "Magma Ninja",        remote = "FireSideQuest",     questId = 1 },
+        { level = 1200, mob = "Lava Pirate",        remote = "FireSideQuest",     questId = 2 },
+        { level = 1250, mob = "Ship Deckhand",      remote = "ShipQuest1",        questId = 1 },
+        { level = 1275, mob = "Ship Engineer",      remote = "ShipQuest1",        questId = 2 },
+        { level = 1300, mob = "Ship Steward",       remote = "ShipQuest2",        questId = 1 },
+        { level = 1325, mob = "Ship Officer",       remote = "ShipQuest2",        questId = 2 },
+        { level = 1350, mob = "Arctic Warrior",     remote = "FrostQuest",        questId = 1 },
+        { level = 1375, mob = "Snow Lurker",        remote = "FrostQuest",        questId = 2 },
+        { level = 1425, mob = "Sea Soldier",        remote = "ForgottenQuest",    questId = 1 },
+        { level = 1450, mob = "Water Fighter",      remote = "ForgottenQuest",    questId = 2 },
+    },
+    [3] = {
+        { level = 1500, mob = "Pirate Millionaire",    remote = "PiratePortQuest",     questId = 1 },
+        { level = 1525, mob = "Pistol Billionaire",    remote = "PiratePortQuest",     questId = 2 },
+        { level = 1575, mob = "Dragon Crew Warrior",   remote = "DragonCrewQuest",     questId = 1 },
+        { level = 1700, mob = "Marine Commodore",      remote = "VenomCrewQuest",      questId = 4 },
+        { level = 1725, mob = "Marine Rear Admiral",   remote = "VenomCrewQuest",      questId = 5 },
+        { level = 1775, mob = "Fishman Raider",        remote = "VenomCrewQuest",      questId = 7 },
+        { level = 1800, mob = "Fishman Captain",       remote = "VenomCrewQuest",      questId = 8 },
+        { level = 1825, mob = "Forest Pirate",         remote = "VenomCrewQuest",      questId = 9 },
+        { level = 1850, mob = "Mythological Pirate",   remote = "VenomCrewQuest",      questId = 10 },
+        { level = 1900, mob = "Jungle Pirate",         remote = "VenomCrewQuest",      questId = 12 },
+        { level = 1925, mob = "Musketeer Pirate",      remote = "VenomCrewQuest",      questId = 13 },
+        { level = 1975, mob = "Reborn Skeleton",       remote = "HauntedQuest1",       questId = 1 },
+        { level = 2000, mob = "Living Zombie",         remote = "HauntedQuest1",       questId = 2 },
+        { level = 2050, mob = "Posessed Mummy",        remote = "HauntedQuest2",       questId = 2 },
+        { level = 2075, mob = "Peanut Scout",          remote = "NutsIslandQuest",     questId = 1 },
+        { level = 2100, mob = "Peanut President",      remote = "NutsIslandQuest",     questId = 2 },
+        { level = 2125, mob = "Ice Cream Chef",        remote = "IceCreamIslandQuest", questId = 1 },
+        { level = 2150, mob = "Ice Cream Commander",   remote = "IceCreamIslandQuest", questId = 2 },
+        { level = 2250, mob = "Baking Staff",          remote = "CakeQuest2",          questId = 1 },
+        { level = 2275, mob = "Head Baker",            remote = "CakeQuest2",          questId = 2 },
+        { level = 2300, mob = "Cocoa Warrior",         remote = "ChocQuest1",          questId = 1 },
+        { level = 2325, mob = "Chocolate Bar Battler", remote = "ChocQuest1",          questId = 2 },
+        { level = 2350, mob = "Sweet Thief",           remote = "ChocQuest2",          questId = 1 },
+        { level = 2375, mob = "Candy Rebel",           remote = "ChocQuest2",          questId = 2 },
+        { level = 2400, mob = "Candy Pirate",          remote = "CandyQuest1",         questId = 1 },
+        { level = 2425, mob = "Snow Demon",            remote = "CandyQuest1",         questId = 2 },
+        { level = 2450, mob = "Isle Outlaw",           remote = "TikiQuest1",          questId = 1 },
+        { level = 2475, mob = "Island Boy",            remote = "TikiQuest1",          questId = 2 },
+        { level = 2500, mob = "Sun-kissed Warrior",    remote = "TikiQuest2",          questId = 1 },
+        { level = 2525, mob = "Isle Champion",         remote = "TikiQuest2",          questId = 2 },
+        { level = 2550, mob = "Serpent Hunter",        remote = "TikiQuest3",          questId = 1 },
+        { level = 2575, mob = "Skull Slayer",          remote = "TikiQuest3",          questId = 2 },
+        { level = 2600, mob = "Reef Bandit",           remote = "SubmergedQuest1",     questId = 1 },
+        { level = 2625, mob = "Coral Pirate",          remote = "SubmergedQuest1",     questId = 2 },
+        { level = 2650, mob = "Sea Chanter",           remote = "SubmergedQuest2",     questId = 1 },
+        { level = 2675, mob = "Ocean Prophet",         remote = "SubmergedQuest2",     questId = 2 },
+        { level = 2700, mob = "Grand Devotee",         remote = "SubmergedQuest3",     questId = 2 },
+    },
 }
+
+local function questListForSea()
+    local sea = CURRENT_SEA or 1
+    return QUESTS[sea] or QUESTS[1]
+end
 
 local function getLevel()
     local ok, lvl = pcall(function()
@@ -1131,8 +1210,9 @@ end
 local function pickQuest()
     local lvl = getLevel()
     if not lvl then return nil end
-    local best = QUESTS[1]
-    for _, q in ipairs(QUESTS) do
+    local list = questListForSea()
+    local best = list[1]
+    for _, q in ipairs(list) do
         if lvl >= q.level then best = q end
     end
     return best
@@ -2397,18 +2477,14 @@ end
 local farmTab = makeTab("Farm", 1)
 
 makeLabel(farmTab, "Mobs matáveis do servidor (Workspace.Enemies). Clique para selecionar e ligue o Auto Farm.", true)
+local seaNamesFarm = { [1] = "1º mar", [2] = "2º mar", [3] = "3º mar" }
+makeLabel(farmTab, "Mar detectado: " .. (seaNamesFarm[CURRENT_SEA or 1] or "desconhecido"))
 
 makeSection(farmTab, "Progressão")
 
-UI.toggles.autoQuest = makeToggle(farmTab, "Auto Quest (1º mar)", false, function(on)
+UI.toggles.autoQuest = makeToggle(farmTab, "Auto Quest (todos os mares)", false, function(on)
     State.autoQuest = on
     if on then
-        if CURRENT_SEA and CURRENT_SEA ~= 1 then
-            setStatus("Auto Quest é só para o 1º mar", true)
-            if UI.toggles.autoQuest then UI.toggles.autoQuest.set(false) end
-            return
-        end
-
         local q = pickQuest()
         if not q then
             setStatus("Auto quest: não foi possível ler o nível (Player.Data)", true)
@@ -2426,7 +2502,7 @@ UI.toggles.autoQuest = makeToggle(farmTab, "Auto Quest (1º mar)", false, functi
             startFarm()
         end
 
-        setStatus("Auto quest: " .. q.mob .. " (lvl " .. tostring(getLevel()) .. ")")
+        setStatus("Auto quest (mar " .. tostring(CURRENT_SEA or 1) .. "): " .. q.mob .. " (lvl " .. tostring(getLevel()) .. ")")
         task.spawn(questLoop)
     else
         if State.questStartedFarm then
@@ -2444,7 +2520,7 @@ makeButton(farmTab, "Tentar entregar quest", function()
     setStatus("Pedido de entrega enviado (fale com o NPC se não completar)")
 end)
 
-makeLabel(farmTab, "Auto Quest usa a tabela do 1º mar e o farm no mob da quest.", true)
+makeLabel(farmTab, "Auto Quest detecta o mar pelo PlaceId e usa a tabela do 1º, 2º ou 3º mar. A entrega ainda é manual.", true)
 
 makeSection(farmTab, "Mobs e farm")
 
