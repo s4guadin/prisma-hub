@@ -177,14 +177,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
 | Arquivo | O que é |
 |---|---|
 | `MEMORIA.md` | Este documento. Ler antes de abrir código. |
-| `hub.lua` | Prisma Hub 1.8 (arquivo único). |
+| `hub.lua` | Prisma Hub 1.8.1 (arquivo único). |
 | `teste.lua` | Teste mínimo de GUI (quadrado azul "GUI OK"). |
 
 ## 8. Estado atual
 
 - Planejamento: **completo** (este arquivo).
-- Código: **Fase 1.8** em `hub.lua`.
-- Versão atual: `1.8` (Prisma Hub).
+- Código: **Fase 1.8.1** em `hub.lua`.
+- Versão atual: `1.8.1` (Prisma Hub).
 
 ### Mudanças da 1.4 (pacote "Tudo" inspirado em hubs públicos)
 - **Renomeado para Prisma Hub** (`CONFIG.name`, título da janela, botão de reabrir "P").
@@ -455,4 +455,14 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   por fruta", 1–50, salvo no config) e só chama `StoreFruit` se houver vaga.
   Verifica se o tool saiu da mochila para confirmar; se o servidor recusar com
   vaga na conta, diminui a capacidade aprendida. Botão manual na aba ESP.
+  Sintaxe validada.
+- **Correção do grab puxando ilhas (1.8.1)**: a detecção usava
+  `fruitNameHasKnown` em qualquer posição do nome, então Models de ilha como
+  "Ice Castle" (Ice) e "Magma Village" (Magma) entravam na lista de frutas, e o
+  grab pegava uma parte qualquer do modelo com `FindFirstChildWhichIsA`. Agora
+  `isFruitTool` exige um `Handle` como **filho direto** (BasePart), aceita
+  `Tool` com `ToolTip` "Blox Fruit", `OriginalName` com "Fruit" ou nome
+  `Base-Base`, e só aceita nome simples de fruta quando é o nome inteiro
+  ("Rocket"), nunca nome composto ("Ice Castle"). "Puxar fruta" revalida o alvo
+  e usa só o `Handle` direto. `fruitHandle` e `fruitNameHasKnown` removidos.
   Sintaxe validada.

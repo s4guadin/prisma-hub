@@ -1,5 +1,5 @@
 --[[
-    Prisma Hub — 1.8
+    Prisma Hub — 1.8.1
     Arquivo único. PC. Sem key. Anti-detecção básica.
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
@@ -35,7 +35,7 @@ local bootOk, bootErr = pcall(function()
 --==================== CONFIG ====================
 local CONFIG = {
     name = "Prisma Hub",
-    version = "1.8",
+    version = "1.8.1",
 
     jitter = 0.30,
     maxErrors = 3,
@@ -1039,30 +1039,6 @@ local FRUIT_NAMES = {
     yeti = true,
 }
 
-local function fruitHandle(obj)
-    if not obj then return nil end
-    return obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart", true)
-end
-
--- procura o nome de uma fruta conhecida respeitando limites de palavra
-local function fruitNameHasKnown(name)
-    local lower = string.lower(tostring(name))
-    for fruitName in pairs(FRUIT_NAMES) do
-        local init = 1
-        while true do
-            local s, e = string.find(lower, fruitName, init, true)
-            if not s then break end
-            local before = s > 1 and string.sub(lower, s - 1, s - 1) or ""
-            local after = e < #lower and string.sub(lower, e + 1, e + 1) or ""
-            if not string.match(before, "%a") and not string.match(after, "%a") then
-                return true
-            end
-            init = e + 1
-        end
-    end
-    return false
-end
-
 -- nomes genéricos que NÃO são fruta no chão (ex. prop "Fruit" da Creation)
 local FRUIT_BLOCKED = {
     "fruitspawn", "fruitdealer", "fruitnotifier", "fruitgiver", "fruitquest",
@@ -1084,49 +1060,51 @@ local function isFruitTool(obj)
     local isTool = obj:IsA("Tool")
     local isModel = obj:IsA("Model")
     if not (isTool or isModel) then return false end
-    if not fruitHandle(obj) then return false end
+
+    -- fruta no chão tem um Handle como FILHO DIRETO. Não usamos descendente:
+    -- ilhas são Models grandes cheias de partes e eram confundidas com fruta
+    -- (ex. "Ice Castle" por causa de "Ice", "Magma Village" por "Magma").
+    local handle = obj:FindFirstChild("Handle")
+    if not handle or not handle:IsA("BasePart") then return false end
 
     local name = tostring(obj.Name)
     local lower = string.lower(name)
     if isGenericFruitName(name) then return false end
 
-    -- nome de fruta conhecida em qualquer posição (ex. "Rocket-Rocket Fruit")
-    if fruitNameHasKnown(name) then return true end
+    -- 1) Tool de fruta equipável
+    if isTool then
+        local okTip, tip = pcall(function() return obj.ToolTip end)
+        if okTip and tip == "Blox Fruit" then return true end
+    end
 
-    -- "Fruit" com algo antes (ex. "Rocket Fruit"); rejeita só "Fruit"
+    -- 2) atributo OriginalName (ex. "Rocket-Rocket Fruit")
+    local okOrig, original = pcall(function() return obj:GetAttribute("OriginalName") end)
+    if okOrig and type(original) == "string" and #original > 0 then
+        local orig = tostring(original)
+        if not isGenericFruitName(orig) then
+            local ol = string.lower(orig)
+            if string.find(ol, "fruit", 1, true) then return true end
+            local obase = ol:match("^([^%-%s]+)") or ol
+            if (string.find(orig, "-", 1, true) or not string.find(orig, "%s")) and FRUIT_NAMES[obase] then
+                return true
+            end
+        end
+    end
+
+    -- 3) "Fruit" com algo antes (ex. "Rocket Fruit"); rejeita só "Fruit"
     local fs = string.find(lower, "fruit", 1, true)
     if fs then
         local prefix = string.sub(lower, 1, fs - 1):gsub("[%s%-_%d]", "")
         if #prefix > 0 then return true end
     end
 
-    -- atributo OriginalName (ex. "Rocket-Rocket Fruit")
-    local okOrig, original = pcall(function() return obj:GetAttribute("OriginalName") end)
-    if okOrig and original ~= nil then
-        local orig = tostring(original)
-        if not isGenericFruitName(orig) then
-            if fruitNameHasKnown(orig) then return true end
-            local ol = string.lower(orig)
-            local os_ = string.find(ol, "fruit", 1, true)
-            if os_ then
-                local prefix = string.sub(ol, 1, os_ - 1):gsub("[%s%-_%d]", "")
-                if #prefix > 0 then return true end
-            end
-        end
-    end
-
-    if isTool then
-        -- ToolTip usado pelas frutas equipáveis
-        local okTip, tip = pcall(function() return obj.ToolTip end)
-        if okTip and tip == "Blox Fruit" then return true end
-    end
-
-    -- nome simples da fruta (ex. "Rocket", "Dragon")
+    -- 4) nome no formato "Rocket-Rocket" ou o nome exato da fruta ("Rocket").
+    -- Nome composto ("Ice Castle") NÃO conta: senão ilhas entram na lista.
     local base = string.lower(name:match("^([^%-%s]+)") or name)
-    if FRUIT_NAMES[base] == true then
-        if isTool then return true end
-        -- modelo só conta se tiver um Handle próprio (fruta no chão)
-        if obj:FindFirstChild("Handle") then return true end
+    if FRUIT_NAMES[base] then
+        if string.find(name, "-", 1, true) then return true end
+        local rest = string.sub(lower, #base + 1)
+        if rest == "" then return true end
     end
 
     return false
@@ -4246,9 +4224,15 @@ makeButton(espTab, "Puxar fruta selecionada (grab)", function()
         setStatus("Selecione uma fruta na lista", true)
         return
     end
-    local handle = fruitHandle(State.fruitTarget)
+    -- revalida: garante que o alvo ainda é fruta (e não uma ilha/modelo grande)
+    if not isFruitTool(State.fruitTarget) then
+        State.fruitTarget = nil
+        setStatus("Alvo não é fruta (lista desatualizada)", true)
+        return
+    end
+    local handle = State.fruitTarget:FindFirstChild("Handle")
     local hrp = getHRP()
-    if handle and hrp then
+    if handle and handle:IsA("BasePart") and hrp then
         pcall(function() handle.CFrame = hrp.CFrame end)
         setStatus("Fruta puxada: " .. State.fruitTarget.Name)
     else
