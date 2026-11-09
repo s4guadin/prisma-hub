@@ -203,6 +203,7 @@ local State = {
     autoRaid = false,
     raidKey = nil,
     raidStartedFarm = false,
+    instantFarm = true,
     killAura = false,
     questKey = nil,
     questStartedFarm = false,
@@ -223,7 +224,7 @@ local UI = { toggles = {}, sliders = {}, lists = {} }
 local antiAfkConn = nil
 local mobCache = { time = 0, name = "", list = {} }
 
--- Kill aura instantâneo: usa os remotes de hit para acertar todos de uma vez.
+-- Kill aura/farm instantâneo: SimulationRadius + Humanoid.Health = 0.
 local AURA = {
     hitId = nil,
     hooked = false,
@@ -233,6 +234,9 @@ local AURA = {
     simOk = nil,
     lastHitIdWarn = 0,
 }
+
+-- declarada aqui e definida mais abaixo; usada também pelo farm/raid
+local forceSimulationRadius
 
 --==================== BOSSES ====================
 -- Nomes dos bosses (todas as ilhas/mar). Usados para separar boss de mob comum.
@@ -849,6 +853,23 @@ local function boostTarget(mob)
     end
 end
 
+-- mata o alvo na hora (mesmo método do Kill Aura instantâneo)
+local function instantKillMob(mob)
+    if not mob or not mob.Parent then return false end
+    local hum = mob:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return false end
+
+    forceSimulationRadius()
+    if not AURA.simOk then return false end
+
+    pcall(function()
+        if hum.Parent and hum.Health > 0 then
+            hum.Health = 0
+        end
+    end)
+    return true
+end
+
 -- teleporta até o inimigo (se preciso), para a velocidade e ataca
 local function engageEnemy(targetName, range)
     if targetName == "" or not isAlive() then return end
@@ -882,6 +903,11 @@ local function engageEnemy(targetName, range)
             mhrp.AssemblyLinearVelocity = Vector3.zero
             mhrp.AssemblyAngularVelocity = Vector3.zero
         end)
+    end
+
+    -- mata na hora (farm/raid instantâneo) e usa o ataque como reforço
+    if State.instantFarm then
+        instantKillMob(mob)
     end
 
     attackOnce()
@@ -1393,6 +1419,9 @@ end
 local function autoRaidLoop()
     while State.autoRaid do
         local ok = pcall(function()
+            State.instantFarm = true
+            forceSimulationRadius()
+
             local q = pickQuest()
             if not q then
                 if setStatus then setStatus("Auto raid: não foi possível ler o nível", true) end
@@ -1447,7 +1476,7 @@ local function getNetRemotes()
 end
 
 -- Aumenta o raio de simulação do cliente para o servidor aceitar a morte dos mobs.
-local function forceSimulationRadius()
+function forceSimulationRadius()
     local okAny = false
 
     local setSim = setsimulationradius or (getgenv and getgenv().setsimulationradius)
@@ -2122,6 +2151,7 @@ local function saveConfig()
         farmDelay = CONFIG.farmDelay,
         farmRange = CONFIG.farmRange,
         killAuraRange = CONFIG.killAuraRange,
+        instantFarm = State.instantFarm,
         flySpeed = CONFIG.flySpeed,
         statTarget = State.statTarget,
     }
@@ -2167,6 +2197,9 @@ local function loadConfig()
     end
     if tonumber(data.killAuraRange) and UI.sliders.killAuraRange then
         UI.sliders.killAuraRange.set(tonumber(data.killAuraRange))
+    end
+    if type(data.instantFarm) == "boolean" and UI.toggles.instantFarm then
+        UI.toggles.instantFarm.set(data.instantFarm)
     end
     if tonumber(data.flySpeed) and UI.sliders.flySpeed then
         UI.sliders.flySpeed.set(tonumber(data.flySpeed))
@@ -2900,6 +2933,14 @@ UI.toggles.autoRaid = makeToggle(farmTab, "Auto Raid (ilha por ilha)", false, fu
             UI.toggles.autoQuest.set(false)
         end
 
+        -- raid sempre com morte instantânea
+        if UI.toggles.instantFarm and not UI.toggles.instantFarm.get() then
+            UI.toggles.instantFarm.set(true)
+        else
+            State.instantFarm = true
+            forceSimulationRadius()
+        end
+
         local q = pickQuest()
         if not q then
             setStatus("Auto raid: não foi possível ler o nível", true)
@@ -2977,6 +3018,16 @@ makeButton(farmTab, "TP para mob selecionado", function()
     end
     boostTarget(mob)
     teleport(hrp.Position + Vector3.new(0, 3, -3), State.farmTarget)
+end)
+
+UI.toggles.instantFarm = makeToggle(farmTab, "Farm instantâneo (mata na hora)", true, function(on)
+    State.instantFarm = on
+    if on then
+        forceSimulationRadius()
+        setStatus("Farm instantâneo ligado (SimulationRadius + Health = 0)")
+    else
+        setStatus("Farm instantâneo desligado (volta ao ataque normal)")
+    end
 end)
 
 UI.toggles.autoFarm = makeToggle(farmTab, "Auto Farm", false, function(on)

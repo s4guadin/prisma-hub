@@ -201,7 +201,9 @@ Não é bypass mágico. Reduz padrões detectáveis:
   permite. O alvo e o status mostram o nível.
 - **Auto Raid (ilha por ilha)**: usa a tabela de quests do mar atual, inicia a
   quest, entrega via `CommF_:InvokeServer("CompleteQuest")` e, quando o nível
-  sobe, troca para o próximo mob/ilha automaticamente. Reaproveita o Auto Farm.
+  sobe, troca para o próximo mob/ilha automaticamente. Reaproveita o Auto Farm e
+  força o **Farm instantâneo** (mata cada mob na hora com `SimulationRadius` +
+  `Humanoid.Health = 0`).
 - **Kill Aura instantâneo**: usa o método dos hubs públicos
   `sethiddenproperty(LP, "SimulationRadius", math.huge)` +
   `sethiddenproperty(LP, "MaxSimulationRadius", math.huge)` + `Humanoid.Health = 0`
@@ -376,3 +378,7 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   como DragonHUB/Btteam/RimuraHub). Reforço com `RE/RegisterAttack` +
   `RE/RegisterHit` e fallback para ataque normal quando `sethiddenproperty` não
   existe no executor.
+- **Farm instantâneo** (`State.instantFarm`, toggle na aba Farm, ligado por
+  padrão): `engageEnemy` chama `instantKillMob`, que aplica o mesmo método no
+  alvo do Auto Farm/Auto Quest/Auto Raid. O **Auto Raid** força o modo ligado em
+  cada ciclo, então os mobs da raid morrem na hora. Salvo/carregado no config.
