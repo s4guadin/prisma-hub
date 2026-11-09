@@ -1,9 +1,9 @@
 --[[
-    Prisma Hub — 1.6
+    Prisma Hub — 1.7
     Arquivo único. PC. Sem key. Anti-detecção básica.
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
-    Novidades 1.6: ESP (jogadores/bosses/frutas/baús), notificador de frutas,
+    Novidades 1.7: ESP (jogadores/bosses/frutas/baús), notificador de frutas,
     lista + TP de frutas, Auto Quest (1º/2º/3º mar), Auto Raid pairando alto e
     matando na hora, Auto Skills Z/X/C, Kill Aura instantâneo, ataque rápido,
     Auto Stats, server hop, auto rejoin, fly, noclip e pulo infinito.
@@ -34,7 +34,7 @@ local bootOk, bootErr = pcall(function()
 --==================== CONFIG ====================
 local CONFIG = {
     name = "Prisma Hub",
-    version = "1.6",
+    version = "1.7",
 
     jitter = 0.30,
     maxErrors = 3,
@@ -189,6 +189,13 @@ local State = {
     fruitNotify = false,
     seenFruits = {},
     fruitTarget = nil,
+    fruitNotifyStarted = false,
+    fruitSpawnLast = nil,
+    fruitSpawnEstimate = nil,
+    fruitSpawnIntervals = {},
+    fruitSpawnApprox = false,
+    fruitRadarConn = nil,
+    fruitRadarGrace = 0,
 
     -- combate
     skillZ = false,
@@ -1031,6 +1038,41 @@ local function fruitHandle(obj)
     return obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart", true)
 end
 
+-- procura o nome de uma fruta conhecida respeitando limites de palavra
+local function fruitNameHasKnown(name)
+    local lower = string.lower(tostring(name))
+    for fruitName in pairs(FRUIT_NAMES) do
+        local init = 1
+        while true do
+            local s, e = string.find(lower, fruitName, init, true)
+            if not s then break end
+            local before = s > 1 and string.sub(lower, s - 1, s - 1) or ""
+            local after = e < #lower and string.sub(lower, e + 1, e + 1) or ""
+            if not string.match(before, "%a") and not string.match(after, "%a") then
+                return true
+            end
+            init = e + 1
+        end
+    end
+    return false
+end
+
+-- nomes genéricos que NÃO são fruta no chão (ex. prop "Fruit" da Creation)
+local FRUIT_BLOCKED = {
+    "fruitspawn", "fruitdealer", "fruitnotifier", "fruitgiver", "fruitquest",
+    "fruitbasket", "fruitstand", "fruitshop", "fruitmarker", "fruitpoint",
+    "fruitlocation", "physicalfruit", "fruitmodel",
+}
+
+local function isGenericFruitName(name)
+    local n = string.lower(tostring(name)):gsub("[%s%-_]", "")
+    if n == "fruit" or n == "fruits" then return true end
+    for _, b in ipairs(FRUIT_BLOCKED) do
+        if string.find(n, b, 1, true) then return true end
+    end
+    return false
+end
+
 local function isFruitTool(obj)
     if not obj then return false end
     local isTool = obj:IsA("Tool")
@@ -1040,17 +1082,30 @@ local function isFruitTool(obj)
 
     local name = tostring(obj.Name)
     local lower = string.lower(name)
-    if string.find(lower, "fruitspawn", 1, true) or string.find(lower, "dealer", 1, true) then
-        return false
+    if isGenericFruitName(name) then return false end
+
+    -- nome de fruta conhecida em qualquer posição (ex. "Rocket-Rocket Fruit")
+    if fruitNameHasKnown(name) then return true end
+
+    -- "Fruit" com algo antes (ex. "Rocket Fruit"); rejeita só "Fruit"
+    local fs = string.find(lower, "fruit", 1, true)
+    if fs then
+        local prefix = string.sub(lower, 1, fs - 1):gsub("[%s%-_%d]", "")
+        if #prefix > 0 then return true end
     end
-    if string.find(lower, "fruit", 1, true) then return true end
 
     -- atributo OriginalName (ex. "Rocket-Rocket Fruit")
     local okOrig, original = pcall(function() return obj:GetAttribute("OriginalName") end)
     if okOrig and original ~= nil then
-        local ol = string.lower(tostring(original))
-        if string.find(ol, "fruit", 1, true) or string.find(ol, "-", 1, true) then
-            return true
+        local orig = tostring(original)
+        if not isGenericFruitName(orig) then
+            if fruitNameHasKnown(orig) then return true end
+            local ol = string.lower(orig)
+            local os_ = string.find(ol, "fruit", 1, true)
+            if os_ then
+                local prefix = string.sub(ol, 1, os_ - 1):gsub("[%s%-_%d]", "")
+                if #prefix > 0 then return true end
+            end
         end
     end
 
@@ -1058,9 +1113,6 @@ local function isFruitTool(obj)
         -- ToolTip usado pelas frutas equipáveis
         local okTip, tip = pcall(function() return obj.ToolTip end)
         if okTip and tip == "Blox Fruit" then return true end
-
-        -- fruta no chão no formato "Rocket-Rocket"
-        if string.find(name, "-", 1, true) then return true end
     end
 
     -- nome simples da fruta (ex. "Rocket", "Dragon")
@@ -1321,6 +1373,104 @@ local function syncESP()
 end
 
 --==================== FRUTAS ====================
+-- Timer estimado de spawn: o jogo só avisa depois que a fruta nasce
+-- (Remotes.RadarNotify). O spawn natural é a cada 60 min (45 min no fim de
+-- semana) e a fruta some após 20 min. Guardamos o intervalo entre spawns vistos
+-- para calibrar a estimativa. Previsão exata antes do spawn não existe no cliente.
+local FRUIT_SPAWN_WEEKDAY = 3600 -- 60 min
+local FRUIT_SPAWN_WEEKEND = 2700 -- 45 min
+
+local function fruitDefaultInterval()
+    local ok, t = pcall(function() return os.date("*t") end)
+    if ok and type(t) == "table" and (t.wday == 1 or t.wday == 7) then
+        return FRUIT_SPAWN_WEEKEND
+    end
+    return FRUIT_SPAWN_WEEKDAY
+end
+
+local function fruitTimeText(sec)
+    sec = math.max(0, math.floor(sec or 0))
+    local m = math.floor(sec / 60)
+    local s = sec % 60
+    if m > 0 then return m .. "m " .. s .. "s" end
+    return s .. "s"
+end
+
+local function updateFruitSpawnLabel()
+    if not UI.fruitSpawnLabel then return end
+    local last = State.fruitSpawnLast
+    if not last then
+        UI.fruitSpawnLabel.Text = "Spawn: aguardando uma fruta para calibrar o timer"
+        return
+    end
+    local elapsed = os.clock() - last
+    local estimate = State.fruitSpawnEstimate or fruitDefaultInterval()
+    local remaining = estimate - elapsed
+    local n = #State.fruitSpawnIntervals
+    local suffix
+    if State.fruitSpawnApprox then
+        suffix = " · aproximado (fruta já no chão)"
+    elseif n > 0 then
+        suffix = " · média de " .. n .. " spawn" .. (n > 1 and "s" or "")
+    else
+        suffix = " · estimado"
+    end
+    if remaining > 0 then
+        local text = "Spawn: ~" .. fruitTimeText(remaining) .. " (última há " .. fruitTimeText(elapsed) .. ")"
+        if State.fruitSpawnApprox then
+            text = text .. " · aprox."
+        elseif n > 0 then
+            text = text .. " · média " .. n
+        else
+            text = text .. " · estimado"
+        end
+        UI.fruitSpawnLabel.Text = text
+    else
+        UI.fruitSpawnLabel.Text = "Spawn: iminente (última há " .. fruitTimeText(elapsed) .. ")" .. suffix
+    end
+end
+
+local function noteFruitSpawn(now)
+    now = now or os.clock()
+    if State.fruitSpawnLast then
+        local delta = now - State.fruitSpawnLast
+        if delta >= 120 and delta <= 5400 then
+            table.insert(State.fruitSpawnIntervals, delta)
+            while #State.fruitSpawnIntervals > 10 do
+                table.remove(State.fruitSpawnIntervals, 1)
+            end
+            local sum = 0
+            for _, v in ipairs(State.fruitSpawnIntervals) do sum = sum + v end
+            State.fruitSpawnEstimate = sum / #State.fruitSpawnIntervals
+        end
+    end
+    State.fruitSpawnLast = now
+    updateFruitSpawnLabel()
+end
+
+local function setupFruitRadar()
+    if State.fruitRadarConn then return end
+    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+    local radar = remotes and remotes:FindFirstChild("RadarNotify")
+    if not radar then return end
+
+    State.fruitRadarConn = radar.OnClientEvent:Connect(function(kind, pos)
+        if not State.fruitNotify then return end
+        if kind == "Enabled" then return end
+        local now = os.clock()
+        State.fruitRadarGrace = now
+        State.fruitSpawnApprox = false
+        noteFruitSpawn(now)
+
+        local extra = ""
+        local hrp = getHRP()
+        if hrp and typeof(pos) == "Vector3" then
+            extra = " (" .. math.floor((pos - hrp.Position).Magnitude) .. "m)"
+        end
+        notify("Radar: uma fruta spawnou no servidor!" .. extra, 6)
+    end)
+end
+
 local function fruitNotifyLoop()
     while State.fruitNotify do
         pcall(function()
@@ -1328,12 +1478,32 @@ local function fruitNotifyLoop()
                 if not obj.Parent then State.seenFruits[obj] = nil end
             end
 
+            local firstPass = not State.fruitNotifyStarted
+            local newFruit = false
+            local seenCount = 0
             for _, fruit in ipairs(collectFruits()) do
+                seenCount = seenCount + 1
                 if not State.seenFruits[fruit] then
                     State.seenFruits[fruit] = true
-                    notify("Fruta encontrada: " .. fruit.Name, 5)
+                    if not firstPass then
+                        newFruit = true
+                        if os.clock() - (State.fruitRadarGrace or 0) > 5 then
+                            notify("Fruta encontrada: " .. fruit.Name, 5)
+                        end
+                    end
                 end
             end
+
+            if newFruit then
+                State.fruitSpawnApprox = false
+                noteFruitSpawn()
+            elseif firstPass and seenCount > 0 and not State.fruitSpawnLast then
+                -- já havia fruta no chão: chuta o início do ciclo como agora
+                State.fruitSpawnApprox = true
+                noteFruitSpawn()
+            end
+            State.fruitNotifyStarted = true
+            updateFruitSpawnLabel()
         end)
         task.wait(2)
     end
@@ -3779,10 +3949,35 @@ end)
 
 UI.toggles.fruitNotify = makeToggle(espTab, "Notificador de frutas", false, function(on)
     State.fruitNotify = on
-    if on then task.spawn(fruitNotifyLoop) end
+    if on then
+        State.seenFruits = {}
+        State.fruitNotifyStarted = false
+        setupFruitRadar()
+        updateFruitSpawnLabel()
+        task.spawn(fruitNotifyLoop)
+        setStatus("Notificador de frutas ligado")
+    else
+        if UI.fruitSpawnLabel then
+            UI.fruitSpawnLabel.Text = "Spawn: ligue o notificador para medir"
+        end
+        setStatus("Notificador de frutas desligado")
+    end
 end)
 
 makeSection(espTab, "Frutas")
+
+UI.fruitSpawnLabel = makeLabel(espTab, "Spawn: ligue o notificador para medir", true)
+
+makeButton(espTab, "Resetar timer de spawn", function()
+    State.fruitSpawnLast = nil
+    State.fruitSpawnIntervals = {}
+    State.fruitSpawnEstimate = nil
+    State.fruitSpawnApprox = false
+    updateFruitSpawnLabel()
+    setStatus("Timer de spawn resetado")
+end)
+
+makeLabel(espTab, "Spawn natural: ~60 min (45 min no fim de semana) e a fruta some em 20 min. O timer é estimado pelos spawns detectados.", true)
 
 makeButton(espTab, "Atualizar lista de frutas", function()
     if UI.refreshFruits then UI.refreshFruits() end

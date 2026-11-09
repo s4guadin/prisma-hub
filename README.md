@@ -13,7 +13,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/s4guadin/prisma-hub/m
 - **Boss** — aba separada com bosses vivos no servidor, TP e Auto Boss.
 - **Combat** — Auto Skills Z/X/C (via `Tool.RemoteFunction`), Auto Ataque, Kill Aura instantâneo (mata mobs no raio via `SimulationRadius` + `Humanoid.Health = 0`), Auto Stats com atributo ciclável.
 - **ESP** — jogadores, bosses, frutas e baús (`Highlight` + `BillboardGui` com nome e distância).
-- **Frutas** — notificador (inclui frutas spawnadas pelo servidor), lista, teleporte e "puxar fruta".
+- **Frutas** — notificador (inclui frutas spawnadas pelo servidor), timer estimado de spawn (~60 min, ~45 min no fim de semana), lista, teleporte e "puxar fruta".
 - **Util** — fly, noclip, pulo infinito, server hop, reconectar, auto rejoin, anti-AFK, espectar, TP por coordenadas.
 - **Ilhas** — coordenadas reais por mar + viagem via `CommF_`.
 - **Config** — salvar/carregar (`prisma_config.json`), TP para o spawn.
@@ -42,4 +42,4 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/s4guadin/prisma-hub/m
 
 ## Versão
 
-`1.6` — Prisma Hub
+`1.7` — Prisma Hub

@@ -177,14 +177,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
 | Arquivo | O que é |
 |---|---|
 | `MEMORIA.md` | Este documento. Ler antes de abrir código. |
-| `hub.lua` | Prisma Hub 1.6 (arquivo único). |
+| `hub.lua` | Prisma Hub 1.7 (arquivo único). |
 | `teste.lua` | Teste mínimo de GUI (quadrado azul "GUI OK"). |
 
 ## 8. Estado atual
 
 - Planejamento: **completo** (este arquivo).
-- Código: **Fase 1.6** em `hub.lua`.
-- Versão atual: `1.6` (Prisma Hub).
+- Código: **Fase 1.7** em `hub.lua`.
+- Versão atual: `1.7` (Prisma Hub).
 
 ### Mudanças da 1.4 (pacote "Tudo" inspirado em hubs públicos)
 - **Renomeado para Prisma Hub** (`CONFIG.name`, título da janela, botão de reabrir "P").
@@ -226,10 +226,16 @@ Não é bypass mágico. Reduz padrões detectáveis:
   nome e distância. Cache curto para não pesar (frutas 0.5s, baús 2s).
 - **Notificador de frutas**: avisa quando uma fruta nova aparece no chão,
   inclusive as que o **servidor spawna** (filhos diretos do `Workspace`). A
-  detecção aceita `Tool`/`Model` com `Handle` quando o nome contém "Fruit",
-  o `ToolTip` é `Blox Fruit`, existe `OriginalName` (com "-"), o nome tem "-"
-  (ex. "Rocket-Rocket") ou é o nome simples de uma fruta conhecida
-  (`FRUIT_NAMES`). Pastas com "fruit"/"spawn" no nome também são varridas.
+  detecção aceita `Tool`/`Model` com `Handle` quando o nome contém uma fruta
+  conhecida (`FRUIT_NAMES`), "Fruit" com prefixo, `ToolTip` `Blox Fruit`,
+  `OriginalName` ou nome com "-". Nomes genéricos como **"Fruit"**,
+  "FruitSpawn", "FruitDealer" e "PhysicalFruit" são rejeitados (evita o prop
+  "Fruit" da Creation). Pastas com "fruit"/"spawn" no nome também são varridas.
+- **Timer de spawn**: o jogo só avisa depois que a fruta nasce
+  (`Remotes.RadarNotify`). O hub escuta esse remote (alerta imediato) e mantém
+  uma contagem estimada: ciclo de ~60 min (45 min no fim de semana), fruta some
+  em 20 min. A estimativa é calibrada pela média dos intervalos observados.
+  Label na aba ESP + botão "Resetar timer de spawn".
 - **Lista de frutas + TP**: aba ESP lista frutas, teleporta e tem "Puxar fruta"
   (grab client-side do Handle).
 - **Auto Quest (1º/2º/3º mar)**: detecta o mar pelo `PlaceId` e usa a tabela de
@@ -422,3 +428,11 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   ("Rocket-Rocket") ou nome simples de fruta (`FRUIT_NAMES`, 50 frutas).
   `collectFruits` também varre pastas com "fruit"/"spawn" no nome. "Puxar fruta"
   passou a usar `fruitHandle` (funciona com Model também). Sintaxe validada.
+- **Correção do falso "Fruit" + timer de spawn**: nomes genéricos
+  (`fruit`, `fruits`, `fruitspawn`, `fruitdealer`, `physicalfruit`,
+  `fruitmodel`, etc.) agora são rejeitados. `FRUIT_NAMES` é comparado com
+  limites de palavra e o "Fruit" só entra se tiver prefixo (ex. "Rocket Fruit").
+  Adicionado timer estimado na aba ESP: escuta `Remotes.RadarNotify` para
+  alerta imediato, assume ciclo de 60 min (45 min no fim de semana) e calibra
+  pela média dos intervalos observados. Botão "Resetar timer de spawn".
+  Sintaxe validada.
