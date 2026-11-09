@@ -378,7 +378,7 @@ local function setNoclip(on)
 end
 
 -- movimento contínuo, ~300 studs/s (acima disso o jogo costuma reverter)
-local function teleport(pos, label, silent)
+local function teleport(pos, label, silent, shouldStop)
     if not pos then
         if not silent and setStatus then setStatus("TP falhou: posição inválida", true) end
         return false
@@ -412,6 +412,7 @@ local function teleport(pos, label, silent)
     setNoclip(true)
     local ok = pcall(function()
         while os.clock() < deadline do
+            if shouldStop and shouldStop() then break end
             if hum and hum.Health <= 0 then break end
             local cur = hrp.Position
             local delta = pos - cur
@@ -748,7 +749,10 @@ local function engageEnemy(targetName, range)
     if dist > engageRange then
         local hrp = getHRP()
         if not hrp then return end
-        teleport(mhrp.Position + Vector3.new(0, 3, -3), nil, true)
+        teleport(mhrp.Position + Vector3.new(0, 3, -3), nil, true, function()
+            return not (State.farming or State.bossFarming)
+        end)
+        if not (State.farming or State.bossFarming) then return end
         task.wait(0.25) -- deixa o servidor registrar a posição antes de atacar
     end
 

@@ -341,7 +341,7 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   entradas), seleção automática pelo `PlaceId` (`CURRENT_SEA`). Removido o
   bloqueio que impedia ligar a feature fora do 1º mar.
 - Label "Mar detectado" adicionada na aba Farm.
-- Teleporte com deadline maior para distâncias longas (até 180s), ajudando o
-  farm em ilhas distantes do 2º/3º mar.
+- Teleporte com deadline maior para distâncias longas (até 180s) e cancelável
+  quando o farm/boss é desligado, ajudando o farm em ilhas distantes do 2º/3º mar.
 - Referência das quests: repositório aberto `Sankeurr/OpenSource-Blox-Fruits-Script`.
 - Sintaxe validada (`OK: sintaxe valida`).
