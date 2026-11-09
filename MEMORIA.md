@@ -199,11 +199,15 @@ Não é bypass mágico. Reduz padrões detectáveis:
 - **Auto Farm escolhe o mob**: usa o mob selecionado na lista. Se nenhum estiver
   selecionado, escolhe automaticamente o mob mais forte que o nível do jogador
   permite. O alvo e o status mostram o nível.
-- **Auto Raid (ilha por ilha)**: usa a tabela de quests do mar atual, inicia a
-  quest, entrega via `CommF_:InvokeServer("CompleteQuest")` e, quando o nível
-  sobe, troca para o próximo mob/ilha automaticamente. Reaproveita o Auto Farm e
-  força o **Farm instantâneo** (mata cada mob na hora com `SimulationRadius` +
-  `Humanoid.Health = 0`).
+- **Auto Raid (aba Raid, raid de verdade)**: implementação baseada em hubs
+  públicos (Sankeurr/OpenSource-Blox-Fruits-Script e nyannos/AutoRaid_Improved).
+  Sem chip, compra via `CommF_:InvokeServer("RaidsNpc", "Select", elemento)`;
+  equipa o Microchip; teleporta para o tubo (`RAID_LOCATIONS[mar].tube`); dispara
+  `ProximityPrompt`/`ClickDetector`/`TouchTransmitter` perto do botão; detecta a
+  raid por `Remotes.Raids` (`StartTimer`/`Finished`) ou pelo `RaidTimer` da HUD;
+  limpa as ondas matando o inimigo mais próximo (Farm instantâneo) e avança de
+  `Island 1` a `Island 5` via `_WorldOrigin.Locations`. Inclui seletor de chip,
+  comprar chip, checar raid e Auto Awakening (`Awakener Check/Awaken`).
 - **Kill Aura instantâneo**: usa o método dos hubs públicos
   `sethiddenproperty(LP, "SimulationRadius", math.huge)` +
   `sethiddenproperty(LP, "MaxSimulationRadius", math.huge)` + `Humanoid.Health = 0`
@@ -212,7 +216,7 @@ Não é bypass mágico. Reduz padrões detectáveis:
   `RE/RegisterHit` (com `hitId` capturado por `hookmetamethod`) e, se o executor
   não tiver `sethiddenproperty`, cai para os remotes + ataque normal. Raio
   ajustável (10–100 studs, padrão 30). Não afeta jogadores.
-- **UI reorganizada em 7 abas**: Farm, Boss, Combat, ESP, Util, Ilhas, Config.
+- **UI reorganizada em 8 abas**: Farm, Raid, Boss, Combat, ESP, Util, Ilhas, Config.
   - Largura das abas: 58px, padding 3, texto 12 (cabe nas 424px úteis).
 - **ESP**: jogadores, bosses, frutas e baús. `Highlight` + `BillboardGui` com
   nome e distância. Cache curto para não pesar (frutas 0.5s, baús 2s).
@@ -380,5 +384,12 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   existe no executor.
 - **Farm instantâneo** (`State.instantFarm`, toggle na aba Farm, ligado por
   padrão): `engageEnemy` chama `instantKillMob`, que aplica o mesmo método no
-  alvo do Auto Farm/Auto Quest/Auto Raid. O **Auto Raid** força o modo ligado em
-  cada ciclo, então os mobs da raid morrem na hora. Salvo/carregado no config.
+  alvo do Auto Farm/Auto Quest. Salvo/carregado no config.
+- **Aba Raid** criada e **Auto Raid de verdade** implementado (base:
+  Sankeurr/OpenSource-Blox-Fruits-Script e nyannos/AutoRaid_Improved):
+  compra/equipa Microchip, teleporta ao tubo da raid, dispara prompts do botão,
+  detecta início/fim por `Remotes.Raids`, limpa as ondas com morte instantânea e
+  avança de `Island 1` a `Island 5`. Também adicionados seletor de chip,
+  "Comprar chip", "Checar raid" e **Auto Awakening**. O antigo "Auto Raid (ilha
+  por ilha)" de quests foi removido da aba Farm (o Auto Quest continua lá).
+  Sintaxe validada.

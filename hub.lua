@@ -1,10 +1,10 @@
 --[[
-    Prisma Hub — 1.4
+    Prisma Hub — 1.5
     Arquivo único. PC. Sem key. Anti-detecção básica.
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
     Novidades 1.4: ESP (jogadores/bosses/frutas/baús), notificador de frutas,
-    lista + TP de frutas, Auto Quest (1º/2º/3º mar), Auto Raid (ilha por ilha),
+    lista + TP de frutas, Auto Quest (1º/2º/3º mar), Auto Raid (raid de verdade),
     Auto Skills Z/X/C, Kill Aura instantâneo, ataque rápido,
     Auto Stats, server hop, auto rejoin, fly, noclip e pulo infinito.
     UI estilo hub genérico: sidebar, tema escuro e acento violeta.
@@ -34,7 +34,7 @@ local bootOk, bootErr = pcall(function()
 --==================== CONFIG ====================
 local CONFIG = {
     name = "Prisma Hub",
-    version = "1.4",
+    version = "1.5",
 
     jitter = 0.30,
     maxErrors = 3,
@@ -203,6 +203,14 @@ local State = {
     autoRaid = false,
     raidKey = nil,
     raidStartedFarm = false,
+    raidInRaid = false,
+    raidElement = "Flame",
+    raidConn = nil,
+    raidLastStart = 0,
+    raidRunning = false,
+    raidNoTimerSince = nil,
+    autoAwaken = false,
+    awakenRunning = false,
     instantFarm = true,
     killAura = false,
     questKey = nil,
@@ -237,6 +245,25 @@ local AURA = {
 
 -- declarada aqui e definida mais abaixo; usada também pelo farm/raid
 local forceSimulationRadius
+
+--==================== RAID ====================
+-- Locais do botão de raid (2º e 3º mar). O 1º mar não tem raid.
+local RAID_LOCATIONS = {
+    [2] = {
+        tube = Vector3.new(-6546.1, 310.5, -4767.7),
+        button = Vector3.new(-6530.7, 304.8, -4798.4),
+    },
+    [3] = {
+        tube = Vector3.new(-5010.1, 315.0, -2816.5),
+        button = Vector3.new(-5010.1, 315.0, -2816.5),
+    },
+}
+
+local RAID_ELEMENTS = {
+    "Flame", "Ice", "Quake", "Dark", "Light", "Sand", "Magma", "Rumble",
+    "Buddha", "Paw", "Gravity", "Dough", "Shadow", "Venom", "Control",
+    "Spirit", "Bomb", "Spike", "Blizzard", "Phoenix",
+}
 
 --==================== BOSSES ====================
 -- Nomes dos bosses (todas as ilhas/mar). Usados para separar boss de mob comum.
@@ -1414,32 +1441,241 @@ local function questLoop()
     end
 end
 
---==================== AUTO RAID ====================
--- Avança quest/mob (ilha) automaticamente conforme o nível sobe.
-local function autoRaidLoop()
+--==================== RAID ====================
+-- Auto Raid completo (método usado em hubs públicos, ex. Sankeurr/nyannos):
+-- compra/equipa o Microchip, vai até o botão da raid, dispara os prompts e
+-- limpa as ondas matando os mobs de cada ilha.
+
+local function isRaidChip(t)
+    if not t or not t:IsA("Tool") then return false end
+    if t.Name:find("Microchip") then return true end
+    local ok, original = pcall(function() return t:GetAttribute("OriginalName") end)
+    return ok and original ~= nil and tostring(original):find("Microchip") ~= nil
+end
+
+local function findRaidChip()
+    local char = getChar()
+    local pools = { char, LP:FindFirstChild("Backpack") }
+    for _, pool in ipairs(pools) do
+        if pool then
+            for _, t in ipairs(pool:GetChildren()) do
+                if isRaidChip(t) then return t end
+            end
+        end
+    end
+    return nil
+end
+
+local function raidChipEquipped()
+    local char = getChar()
+    if not char then return false end
+    for _, t in ipairs(char:GetChildren()) do
+        if isRaidChip(t) then return true end
+    end
+    return false
+end
+
+local function equipRaidChip()
+    if raidChipEquipped() then return true end
+    local char = getChar()
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local chip = findRaidChip()
+    if not (hum and chip) then return false end
+
+    for _ = 1, 4 do
+        pcall(function() hum:EquipTool(chip) end)
+        if not raidChipEquipped() and chip.Parent ~= char then
+            pcall(function() chip.Parent = char end)
+        end
+        task.wait(0.15)
+        if raidChipEquipped() then return true end
+    end
+    return raidChipEquipped()
+end
+
+local function raidTimerVisible()
+    local ok, visible = pcall(function()
+        local main = LP.PlayerGui:FindFirstChild("Main")
+        local hud = main and main:FindFirstChild("TopHUDList")
+        local timer = hud and hud:FindFirstChild("RaidTimer")
+        return timer and timer.Visible == true
+    end)
+    return ok and visible == true
+end
+
+local function setRaidStatus(text, isError)
+    State.raidStatus = text
+    if UI.raidStatusLabel then UI.raidStatusLabel.Text = "Status: " .. text end
+    if setStatus then setStatus(text, isError) end
+end
+
+local function setupRaidListener()
+    if State.raidConn then return end
+    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+    local raids = remotes and remotes:FindFirstChild("Raids")
+    if not raids then return end
+
+    State.raidConn = raids.OnClientEvent:Connect(function(kind)
+        if kind == "StartTimer" then
+            State.raidInRaid = true
+            setRaidStatus("Raid iniciada")
+        elseif kind == "Finished" then
+            State.raidInRaid = false
+            setRaidStatus("Raid finalizada")
+        end
+    end)
+end
+
+local function raidTriggerAround(pos, radius)
+    local firePrompt = fireproximityprompt or function() end
+    local fireClick = fireclickdetector or function() end
+    local fireTouch = firetouchinterest or function() end
+    local hrp = getHRP()
+    local fired = 0
+
+    for _, d in ipairs(Workspace:GetDescendants()) do
+        if d:IsA("ProximityPrompt") or d:IsA("ClickDetector") or d:IsA("TouchTransmitter") then
+            local part = d:FindFirstAncestorWhichIsA("BasePart")
+            if not part and d.Parent and d.Parent:IsA("BasePart") then part = d.Parent end
+            if part and (part.Position - pos).Magnitude <= (radius or 60) then
+                if d:IsA("ProximityPrompt") then
+                    pcall(firePrompt, d)
+                elseif d:IsA("ClickDetector") then
+                    pcall(fireClick, d)
+                elseif d:IsA("TouchTransmitter") and hrp then
+                    pcall(fireTouch, part, hrp, 0)
+                    task.wait(0.05)
+                    pcall(fireTouch, part, hrp, 1)
+                end
+                fired = fired + 1
+            end
+        end
+    end
+    return fired
+end
+
+local function raidNearestEnemy()
+    local hrp = getHRP()
+    if not hrp then return nil end
+    local best, bestDist = nil, math.huge
+    for _, mob in ipairs(collectEnemies()) do
+        local mhrp = mob:FindFirstChild("HumanoidRootPart")
+        local hum = mob:FindFirstChildOfClass("Humanoid")
+        if mhrp and hum and hum.Health > 0 then
+            local d = (mhrp.Position - hrp.Position).Magnitude
+            if d < bestDist then
+                bestDist = d
+                best = mob
+            end
+        end
+    end
+    return best, bestDist
+end
+
+local function raidMoveNextIsland()
+    local worldOrigin = Workspace:FindFirstChild("_WorldOrigin")
+    local locations = worldOrigin and worldOrigin:FindFirstChild("Locations")
+    local hrp = getHRP()
+    if not (locations and hrp) then return false end
+
+    local currentIdx, currentDist = nil, math.huge
+    for i = 1, 5 do
+        local island = locations:FindFirstChild("Island " .. i)
+        if island then
+            local d = (hrp.Position - island.Position).Magnitude
+            if d < currentDist then
+                currentDist = d
+                currentIdx = i
+            end
+        end
+    end
+
+    if currentIdx and currentIdx < 5 then
+        local nextIsland = locations:FindFirstChild("Island " .. (currentIdx + 1))
+        if nextIsland then
+            teleport(nextIsland.Position + Vector3.new(0, 45, 120), nil, true, function()
+                return not State.autoRaid
+            end)
+            return true
+        end
+    end
+    return false
+end
+
+local function raidLoop()
+    if State.raidRunning then return end
+    State.raidRunning = true
     while State.autoRaid do
         local ok = pcall(function()
             State.instantFarm = true
-            forceSimulationRadius()
 
-            local q = pickQuest()
-            if not q then
-                if setStatus then setStatus("Auto raid: não foi possível ler o nível", true) end
-                return
+            local timer = raidTimerVisible()
+            if timer then
+                State.raidInRaid = true
+                State.raidNoTimerSince = nil
+            elseif State.raidInRaid then
+                State.raidNoTimerSince = State.raidNoTimerSince or os.clock()
+                if os.clock() - State.raidNoTimerSince > 12 then
+                    State.raidInRaid = false
+                    State.raidNoTimerSince = nil
+                end
             end
 
-            local key = q.remote .. ":" .. tostring(q.questId)
-            if key ~= State.raidKey then
-                State.raidKey = key
-                startQuest(q)
-                if not State.farming then startFarm() end
-            end
+            local inRaid = State.raidInRaid
+            if inRaid then
+                State.raidInRaid = true
+                local mob = raidNearestEnemy()
+                if mob then
+                    local mhrp = mob:FindFirstChild("HumanoidRootPart")
+                    local hrp = getHRP()
+                    if mhrp and hrp and (mhrp.Position - hrp.Position).Magnitude > 25 then
+                        teleport(mhrp.Position + Vector3.new(0, 12, 0), nil, true, function()
+                            return not State.autoRaid
+                        end)
+                    end
+                    boostTarget(mob)
+                    instantKillMob(mob)
+                    attackOnce()
+                    setRaidStatus("Raid: limpando ondas")
+                else
+                    if not raidMoveNextIsland() then
+                        setRaidStatus("Raid: esperando próxima onda")
+                    else
+                        setRaidStatus("Raid: indo para a próxima ilha")
+                    end
+                end
+            else
+                local now = os.clock()
+                if now - State.raidLastStart >= 6 then
+                    State.raidLastStart = now
 
-            -- entrega a quest quando estiver completa; o servidor ignora se não estiver
-            fireRemote("CommF_", "CompleteQuest")
+                    local chip = findRaidChip()
+                    if not chip then
+                        fireRemote("CommF_", "RaidsNpc", "Select", State.raidElement)
+                        task.wait(0.8)
+                        chip = findRaidChip()
+                    end
 
-            if setStatus then
-                setStatus("Auto raid: " .. q.mob .. " [Lv. " .. tostring(q.level) .. "] (seu nível " .. tostring(playerLevel() or "?") .. ")")
+                    if not chip then
+                        setRaidStatus("Raid: sem Microchip (compre no RaidsNpc)", true)
+                    elseif not equipRaidChip() then
+                        setRaidStatus("Raid: não consegui equipar o chip", true)
+                    else
+                        local loc = RAID_LOCATIONS[CURRENT_SEA]
+                        if not loc then
+                            setRaidStatus("Raid: disponível só no 2º e 3º mar", true)
+                        else
+                            teleport(loc.tube + Vector3.new(0, 3, 0), nil, true, function()
+                                return not State.autoRaid
+                            end)
+                            task.wait(1.2)
+                            equipRaidChip()
+                            raidTriggerAround(loc.button, 60)
+                            setRaidStatus("Raid: entrando (chip " .. State.raidElement .. ")")
+                            task.wait(2.5)
+                        end
+                    end
+                end
             end
         end)
 
@@ -1447,14 +1683,27 @@ local function autoRaidLoop()
             if trackError("raid") then
                 State.autoRaid = false
                 if UI.toggles.autoRaid then UI.toggles.autoRaid.set(false) end
-                if setStatus then setStatus("Auto raid desligado (erros)", true) end
+                setRaidStatus("Auto Raid desligado (erros)", true)
             end
         else
             clearErrors("raid")
         end
 
-        task.wait(CONFIG.autoRaidDelay)
+        task.wait(0.5)
     end
+    State.raidRunning = false
+end
+
+local function awakenLoop()
+    if State.awakenRunning then return end
+    State.awakenRunning = true
+    while State.autoAwaken do
+        fireRemote("CommF_", "Awakener", "Check")
+        task.wait(0.3)
+        fireRemote("CommF_", "Awakener", "Awaken")
+        task.wait(2.5)
+    end
+    State.awakenRunning = false
 end
 
 --==================== KILL AURA ====================
@@ -2116,6 +2365,8 @@ local function killSwitch()
     State.autoRaid = false
     State.raidKey = nil
     State.raidStartedFarm = false
+    State.raidInRaid = false
+    State.autoAwaken = false
     State.killAura = false
     State.autoStats = false
     State.fruitNotify = false
@@ -2926,53 +3177,6 @@ end)
 
 makeLabel(farmTab, "Auto Quest detecta o mar pelo PlaceId e usa a tabela do 1º, 2º ou 3º mar. A entrega ainda é manual.", true)
 
-UI.toggles.autoRaid = makeToggle(farmTab, "Auto Raid (ilha por ilha)", false, function(on)
-    State.autoRaid = on
-    if on then
-        if UI.toggles.autoQuest and UI.toggles.autoQuest.get() then
-            UI.toggles.autoQuest.set(false)
-        end
-
-        -- raid sempre com morte instantânea
-        if UI.toggles.instantFarm and not UI.toggles.instantFarm.get() then
-            UI.toggles.instantFarm.set(true)
-        else
-            State.instantFarm = true
-            forceSimulationRadius()
-        end
-
-        local q = pickQuest()
-        if not q then
-            setStatus("Auto raid: não foi possível ler o nível", true)
-            if UI.toggles.autoRaid then UI.toggles.autoRaid.set(false) end
-            return
-        end
-
-        State.raidKey = q.remote .. ":" .. tostring(q.questId)
-        startQuest(q)
-
-        if UI.toggles.autoFarm and not UI.toggles.autoFarm.get() then
-            State.raidStartedFarm = true
-            UI.toggles.autoFarm.set(true)
-        else
-            startFarm()
-        end
-
-        setStatus("Auto raid ligado: " .. q.mob .. " [Lv. " .. tostring(q.level) .. "]")
-        task.spawn(autoRaidLoop)
-    else
-        State.raidKey = nil
-        if State.raidStartedFarm then
-            State.raidStartedFarm = false
-            if UI.toggles.autoFarm and UI.toggles.autoFarm.get() then
-                UI.toggles.autoFarm.set(false)
-            end
-        end
-        setStatus("Auto raid desligado")
-    end
-end)
-
-makeLabel(farmTab, "Auto Raid avança sozinho: entrega a quest, sobe de nível e vai para o próximo mob/ilha.", true)
 
 makeSection(farmTab, "Mobs e farm")
 
@@ -3084,8 +3288,85 @@ UI.refreshMobs = function()
     setStatus("Mobs: " .. #list .. " tipos, " .. total .. " no servidor")
 end
 
+--==================== ABA RAID ====================
+local raidTab = makeTab("Raid", 2)
+
+makeLabel(raidTab, "Auto Raid completo: compra/equipa o Microchip, entra na raid e limpa as ondas sozinho.", true)
+
+makeSection(raidTab, "Auto Raid")
+
+UI.raidStatusLabel = makeLabel(raidTab, "Status: ocioso", true)
+
+UI.raidChipBtn = makeButton(raidTab, "Chip: " .. State.raidElement, function()
+    local idx = table.find(RAID_ELEMENTS, State.raidElement) or 1
+    idx = (idx % #RAID_ELEMENTS) + 1
+    State.raidElement = RAID_ELEMENTS[idx]
+    UI.raidChipBtn.Text = "Chip: " .. State.raidElement
+    setStatus("Chip da raid: " .. State.raidElement)
+end)
+
+makeButton(raidTab, "Comprar chip no NPC", function()
+    fireRemote("CommF_", "RaidsNpc", "Select", State.raidElement)
+    setStatus("Pedido de chip enviado: " .. State.raidElement)
+end)
+
+makeButton(raidTab, "Checar raid", function()
+    local c = getRemote("CommF_")
+    if not c then
+        setStatus("Remote CommF_ não encontrado", true)
+        return
+    end
+    local ok, res = pcall(function() return c:InvokeServer("RaidsNpc", "Check") end)
+    setStatus("Raid check: " .. tostring(ok and res or "falhou"))
+end)
+
+UI.toggles.autoRaid = makeToggle(raidTab, "Auto Raid", false, function(on)
+    State.autoRaid = on
+    if on then
+        if UI.toggles.autoFarm and UI.toggles.autoFarm.get() then
+            UI.toggles.autoFarm.set(false)
+        end
+        if UI.toggles.autoQuest and UI.toggles.autoQuest.get() then
+            UI.toggles.autoQuest.set(false)
+        end
+        if UI.toggles.instantFarm and not UI.toggles.instantFarm.get() then
+            UI.toggles.instantFarm.set(true)
+        else
+            State.instantFarm = true
+            forceSimulationRadius()
+        end
+        State.raidLastStart = 0
+        setupRaidListener()
+        task.spawn(raidLoop)
+        setRaidStatus("Auto Raid ligado (chip " .. State.raidElement .. ")")
+    else
+        State.raidInRaid = false
+        setRaidStatus("Auto Raid desligado")
+    end
+end)
+
+makeLabel(raidTab, "Sem chip, o Auto Raid tenta comprar no RaidsNpc. Funciona no 2º e 3º mar; no 1º mar a raid não existe.", true)
+
+makeSection(raidTab, "Awakening")
+
+UI.toggles.autoAwaken = makeToggle(raidTab, "Auto Awakening", false, function(on)
+    State.autoAwaken = on
+    if on then
+        task.spawn(awakenLoop)
+        setStatus("Auto Awakening ligado")
+    else
+        setStatus("Auto Awakening desligado")
+    end
+end)
+
+makeLabel(raidTab, "Awakening usa CommF_ Awakener Check/Awaken a cada 2.5s.", true)
+
+makeSection(raidTab, "Ilhas da raid")
+
+makeLabel(raidTab, "O Auto Raid avança de Island 1 até Island 5 enquanto houver onda de mobs.", true)
+
 --==================== ABA BOSS ====================
-local bossTab = makeTab("Boss", 2)
+local bossTab = makeTab("Boss", 3)
 
 makeLabel(bossTab, "Bosses vivos no servidor. Clique para selecionar e ligue o Auto Boss.", true)
 
@@ -3181,7 +3462,7 @@ UI.refreshBosses = function()
 end
 
 --==================== ABA COMBAT ====================
-local combatTab = makeTab("Combat", 3)
+local combatTab = makeTab("Combat", 4)
 
 makeLabel(combatTab, "Skills usam o RemoteFunction da arma equipada (Z/X/C). Precisa de alvo vivo perto.", true)
 
@@ -3285,7 +3566,7 @@ UI.statBtn = statBtn
 makeLabel(combatTab, "Auto Stats gasta os pontos via CommF_ AddStat, 1 por ciclo.", true)
 
 --==================== ABA ESP ====================
-local espTab = makeTab("ESP", 4)
+local espTab = makeTab("ESP", 5)
 
 makeLabel(espTab, "Destaques no mundo. Desligue se o FPS cair.", true)
 
@@ -3391,7 +3672,7 @@ UI.refreshFruits = function()
 end
 
 --==================== ABA UTIL ====================
-local utilTab = makeTab("Util", 5)
+local utilTab = makeTab("Util", 6)
 
 makeLabel(utilTab, "Clique em um jogador para selecionar. Use o toggle para TP ou espectar.", true)
 
@@ -3532,7 +3813,7 @@ UI.refreshPlayers = function()
 end
 
 --==================== ABA ILHAS ====================
-local islandsTab = makeTab("Ilhas", 6)
+local islandsTab = makeTab("Ilhas", 7)
 
 local function goIsland(island)
     if island.entrance then
@@ -3576,7 +3857,7 @@ end
 buildIslands()
 
 --==================== ABA CONFIG ====================
-local configTab = makeTab("Config", 7)
+local configTab = makeTab("Config", 8)
 
 makeLabel(configTab, "Config: " .. CONFIG.version)
 makeLabel(configTab, "PC · sem key · anti-detecção ativa")
