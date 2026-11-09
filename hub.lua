@@ -1,5 +1,5 @@
 --[[
-    Prisma Hub — 1.8.2
+    Prisma Hub — 1.8.3
     Arquivo único. PC. Sem key. Anti-detecção básica.
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
@@ -11,21 +11,35 @@
     UI estilo hub genérico: sidebar, tema escuro e acento violeta.
 ]]
 
--- resolve onde a GUI vai morar (gethui se existir, senão PlayerGui/CoreGui)
+-- resolve onde a GUI vai morar (gethui se existir, senão PlayerGui/CoreGui).
+-- Valida o tipo: alguns executores devolvem algo que não aceita ScreenGui.
+local function isValidGuiParent(p)
+    if not p then return false end
+    local ok, res = pcall(function()
+        return p:IsA("PlayerGui") or p:IsA("CoreGui") or (p:IsA("Folder") and p.Parent ~= nil)
+    end)
+    return ok and res == true
+end
+
 local function resolveGuiParent()
+    local candidates = {}
     if gethui then
         local ok, hui = pcall(gethui)
-        if ok and hui then return hui end
+        if ok and hui then table.insert(candidates, hui) end
     end
     local PlayersSvc = game:GetService("Players")
     local lp = PlayersSvc.LocalPlayer
     if lp then
-        local ok, pg = pcall(function() return lp:WaitForChild("PlayerGui", 5) end)
-        if ok and pg then return pg end
+        local ok, pg = pcall(function() return lp:FindFirstChild("PlayerGui") end)
+        if ok and pg then table.insert(candidates, pg) end
     end
     local ok, cg = pcall(function() return game:GetService("CoreGui") end)
-    if ok then return cg end
-    return nil
+    if ok and cg then table.insert(candidates, cg) end
+
+    for _, p in ipairs(candidates) do
+        if isValidGuiParent(p) then return p end
+    end
+    return candidates[1]
 end
 
 local GUI_PARENT = resolveGuiParent()
@@ -35,7 +49,7 @@ local bootOk, bootErr = pcall(function()
 --==================== CONFIG ====================
 local CONFIG = {
     name = "Prisma Hub",
-    version = "1.8.2",
+    version = "1.8.3",
 
     jitter = 0.30,
     maxErrors = 3,
@@ -3021,11 +3035,15 @@ local function new(class, props, parent)
     return inst
 end
 
--- remove instâncias antigas do hub para não empilhar GUI ao reexecutar
+warn("[Prisma] iniciando " .. CONFIG.version .. " (parent: " .. tostring(GUI_PARENT and GUI_PARENT:GetFullName() or "nil") .. ")")
+
+-- remove instâncias antigas do hub para não empilhar GUI ao reexecutar.
+-- Cada Destroy vai em pcall próprio e nunca destrói o próprio parent.
 pcall(function()
+    if not GUI_PARENT then return end
     for _, child in ipairs(GUI_PARENT:GetChildren()) do
-        if child:IsA("ScreenGui") and string.find(child.Name, "^PrismaUI_") then
-            child:Destroy()
+        if child ~= GUI_PARENT and child:IsA("ScreenGui") and string.sub(child.Name, 1, 9) == "PrismaUI_" then
+            pcall(function() child:Destroy() end)
         end
     end
 end)
@@ -3038,12 +3056,22 @@ local gui = new("ScreenGui", {
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 }, GUI_PARENT)
 
+-- se o parent não aceitou a ScreenGui, cai para o PlayerGui
+if not gui.Parent then
+    local lp3 = game:GetService("Players").LocalPlayer
+    local pg3 = lp3 and lp3:FindFirstChild("PlayerGui")
+    if pg3 then pcall(function() gui.Parent = pg3 end) end
+end
+
+warn("[Prisma] ScreenGui criada: parent=" .. tostring(gui.Parent and gui.Parent:GetFullName() or "nil"))
+
 local main = new("Frame", {
     Name = "Main",
     Size = UDim2.new(0, 620, 0, 470),
     Position = UDim2.new(0.5, -310, 0.5, -235),
     BackgroundColor3 = C.bg,
     BorderSizePixel = 0,
+    Visible = true,
 }, gui)
 new("UICorner", { CornerRadius = UDim.new(0, 12) }, main)
 new("UIStroke", { Color = C.stroke, Thickness = 1 }, main)
@@ -4589,7 +4617,15 @@ if not bootOk then
     sg.ResetOnSpawn = false
     sg.IgnoreGuiInset = true
     sg.DisplayOrder = 1000
-    if GUI_PARENT then sg.Parent = GUI_PARENT end
+    local errParent = GUI_PARENT
+    if not isValidGuiParent(errParent) then
+        local lp2 = game:GetService("Players").LocalPlayer
+        errParent = lp2 and lp2:FindFirstChild("PlayerGui")
+    end
+    if errParent then
+        pcall(function() sg.Parent = errParent end)
+    end
+    warn("[Prisma] FALHA NO BOOT: " .. tostring(bootErr))
 
     local lbl = Instance.new("TextLabel")
     lbl.Size = UDim2.new(0, 640, 0, 240)
