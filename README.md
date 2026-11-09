@@ -1,0 +1,44 @@
+# Prisma Hub
+
+Hub customizado para **Blox Fruits**, em **arquivo único**, com UI própria (sem Rayfield/Fluent), **sem key system** e **PC only**.
+
+```
+loadstring(game:HttpGet("https://raw.githubusercontent.com/s4guadin/prisma-hub/main/hub.lua"))()
+```
+
+## Recursos
+
+- **Farm** — lista apenas mobs matáveis de `Workspace.Enemies`, clique para selecionar, Auto Farm, Auto Quest (1º mar), ataque rápido.
+- **Boss** — aba separada com bosses vivos no servidor, TP e Auto Boss.
+- **Combat** — Auto Skills Z/X/C (via `Tool.RemoteFunction`), Auto Ataque, Auto Stats com atributo ciclável.
+- **ESP** — jogadores, bosses, frutas e baús (`Highlight` + `BillboardGui` com nome e distância).
+- **Frutas** — notificador, lista, teleporte e "puxar fruta".
+- **Util** — fly, noclip, pulo infinito, server hop, reconectar, auto rejoin, anti-AFK, espectar, TP por coordenadas.
+- **Ilhas** — coordenadas reais por mar + viagem via `CommF_`.
+- **Config** — salvar/carregar (`prisma_config.json`), TP para o spawn.
+- **Kill switch** — botão "PARAR TUDO" desliga todas as features.
+
+## Uso
+
+1. Execute o loadstring no seu executor (PC).
+2. A janela abre centralizada; arraste pela barra de título.
+3. Selecione um mob/boss/jogador — o clique **só seleciona**. TP e farm começam pelo botão/toggle.
+4. Minimize com `–`; reabra pelo botão **P**.
+
+## Aviso
+
+- Use por sua conta e risco. Scripts de terceiros violam os Termos de Serviço do jogo.
+- Não há bypass de anti-cheat garantido: a camada anti-detecção apenas reduz padrões (jitter, rate limit, `pcall`, sem prints).
+- Recursos podem quebrar após atualizações do jogo. Nomes de remotes ficam centralizados no topo de `hub.lua`.
+
+## Estrutura
+
+| Arquivo | Descrição |
+|---|---|
+| `hub.lua` | Hub completo (arquivo único). |
+| `MEMORIA.md` | Decisões, arquitetura, changelog e checklist de teste. |
+| `teste.lua` | Teste mínimo de GUI. |
+
+## Versão
+
+`1.4` — Prisma Hub
