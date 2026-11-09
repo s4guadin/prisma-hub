@@ -8,9 +8,9 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/s4guadin/prisma-hub/m
 
 ## Recursos
 
-- **Farm** — lista mobs matáveis de `Workspace.Enemies` com nível; clique escolhe o mob do Auto Farm e, sem seleção, ele escolhe o melhor para o seu nível. Inclui Auto Quest (1º/2º/3º mar) e ataque rápido.
+- **Farm** — lista mobs matáveis de `Workspace.Enemies` com nível; clique escolhe o mob do Auto Farm e, sem seleção, ele escolhe o melhor para o seu nível. Inclui Auto Quest (1º/2º/3º mar), Auto Raid (avança ilha por ilha entregando quests) e ataque rápido.
 - **Boss** — aba separada com bosses vivos no servidor, TP e Auto Boss.
-- **Combat** — Auto Skills Z/X/C (via `Tool.RemoteFunction`), Auto Ataque, Auto Stats com atributo ciclável.
+- **Combat** — Auto Skills Z/X/C (via `Tool.RemoteFunction`), Auto Ataque, Kill Aura (puxa e mata inimigos no raio), Auto Stats com atributo ciclável.
 - **ESP** — jogadores, bosses, frutas e baús (`Highlight` + `BillboardGui` com nome e distância).
 - **Frutas** — notificador, lista, teleporte e "puxar fruta".
 - **Util** — fly, noclip, pulo infinito, server hop, reconectar, auto rejoin, anti-AFK, espectar, TP por coordenadas.

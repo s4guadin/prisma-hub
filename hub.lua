@@ -4,7 +4,8 @@
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
     Novidades 1.4: ESP (jogadores/bosses/frutas/baús), notificador de frutas,
-    lista + TP de frutas, Auto Quest (1º/2º/3º mar), Auto Skills Z/X/C, ataque rápido,
+    lista + TP de frutas, Auto Quest (1º/2º/3º mar), Auto Raid (ilha por ilha),
+    Auto Skills Z/X/C, Kill Aura, ataque rápido,
     Auto Stats, server hop, auto rejoin, fly, noclip e pulo infinito.
     UI estilo hub genérico: sidebar, tema escuro e acento violeta.
 ]]
@@ -45,6 +46,8 @@ local CONFIG = {
     attackDelay = 0.10,
     farmDelay = 0.30,
     fastAttackDelay = 0.03,
+    killAuraRange = 30,
+    autoRaidDelay = 2,
 
     esp = {
         refresh = 0.25,
@@ -195,6 +198,10 @@ local State = {
 
     -- progressão
     autoQuest = false,
+    autoRaid = false,
+    raidKey = nil,
+    raidStartedFarm = false,
+    killAura = false,
     questKey = nil,
     questStartedFarm = false,
     autoStats = false,
@@ -1368,6 +1375,94 @@ local function questLoop()
     end
 end
 
+--==================== AUTO RAID ====================
+-- Avança quest/mob (ilha) automaticamente conforme o nível sobe.
+local function autoRaidLoop()
+    while State.autoRaid do
+        local ok = pcall(function()
+            local q = pickQuest()
+            if not q then
+                if setStatus then setStatus("Auto raid: não foi possível ler o nível", true) end
+                return
+            end
+
+            local key = q.remote .. ":" .. tostring(q.questId)
+            if key ~= State.raidKey then
+                State.raidKey = key
+                startQuest(q)
+                if not State.farming then startFarm() end
+            end
+
+            -- entrega a quest quando estiver completa; o servidor ignora se não estiver
+            fireRemote("CommF_", "CompleteQuest")
+
+            if setStatus then
+                setStatus("Auto raid: " .. q.mob .. " [Lv. " .. tostring(q.level) .. "] (seu nível " .. tostring(playerLevel() or "?") .. ")")
+            end
+        end)
+
+        if not ok then
+            if trackError("raid") then
+                State.autoRaid = false
+                if UI.toggles.autoRaid then UI.toggles.autoRaid.set(false) end
+                if setStatus then setStatus("Auto raid desligado (erros)", true) end
+            end
+        else
+            clearErrors("raid")
+        end
+
+        task.wait(CONFIG.autoRaidDelay)
+    end
+end
+
+--==================== KILL AURA ====================
+-- Puxa e ataca todos os inimigos dentro do raio ao redor do personagem.
+local function killAuraLoop()
+    while State.killAura do
+        local ok = pcall(function()
+            if not isAlive() then return end
+            local hrp = getHRP()
+            if not hrp then return end
+
+            local radius = CONFIG.killAuraRange
+            local found = false
+
+            for _, mob in ipairs(collectEnemies()) do
+                local mhrp = mob:FindFirstChild("HumanoidRootPart")
+                local mhum = mob:FindFirstChildOfClass("Humanoid")
+                if mhrp and mhum and mhum.Health > 0 then
+                    local d = (mhrp.Position - hrp.Position).Magnitude
+                    if d <= radius then
+                        found = true
+                        boostTarget(mob)
+                        pcall(function()
+                            mhrp.CFrame = hrp.CFrame * CFrame.new(0, 0, -4)
+                            mhrp.AssemblyLinearVelocity = Vector3.zero
+                            mhrp.AssemblyAngularVelocity = Vector3.zero
+                        end)
+                    end
+                end
+            end
+
+            if found then
+                attackOnce()
+            end
+        end)
+
+        if not ok then
+            if trackError("aura") then
+                State.killAura = false
+                if UI.toggles.killAura then UI.toggles.killAura.set(false) end
+                if setStatus then setStatus("Kill aura desligado (erros)", true) end
+            end
+        else
+            clearErrors("aura")
+        end
+
+        task.wait(jitter(CONFIG.attackDelay))
+    end
+end
+
 --==================== AUTO STATS ====================
 local STATS = { "Melee", "Defense", "Sword", "Gun", "Blox Fruit" }
 
@@ -1836,6 +1931,10 @@ local function killSwitch()
     State.fastAttack = false
     State.fastAttackOwnsAttack = false
     State.autoQuest = false
+    State.autoRaid = false
+    State.raidKey = nil
+    State.raidStartedFarm = false
+    State.killAura = false
     State.autoStats = false
     State.fruitNotify = false
     State.espPlayers = false
@@ -1869,6 +1968,7 @@ local function saveConfig()
         attackDelay = CONFIG.attackDelay,
         farmDelay = CONFIG.farmDelay,
         farmRange = CONFIG.farmRange,
+        killAuraRange = CONFIG.killAuraRange,
         flySpeed = CONFIG.flySpeed,
         statTarget = State.statTarget,
     }
@@ -1911,6 +2011,9 @@ local function loadConfig()
     end
     if tonumber(data.farmRange) and UI.sliders.farmRange then
         UI.sliders.farmRange.set(tonumber(data.farmRange))
+    end
+    if tonumber(data.killAuraRange) and UI.sliders.killAuraRange then
+        UI.sliders.killAuraRange.set(tonumber(data.killAuraRange))
     end
     if tonumber(data.flySpeed) and UI.sliders.flySpeed then
         UI.sliders.flySpeed.set(tonumber(data.flySpeed))
@@ -2597,6 +2700,9 @@ makeSection(farmTab, "Progressão")
 UI.toggles.autoQuest = makeToggle(farmTab, "Auto Quest (todos os mares)", false, function(on)
     State.autoQuest = on
     if on then
+        if UI.toggles.autoRaid and UI.toggles.autoRaid.get() then
+            UI.toggles.autoRaid.set(false)
+        end
         local q = pickQuest()
         if not q then
             setStatus("Auto quest: não foi possível ler o nível (Player.Data)", true)
@@ -2633,6 +2739,46 @@ makeButton(farmTab, "Tentar entregar quest", function()
 end)
 
 makeLabel(farmTab, "Auto Quest detecta o mar pelo PlaceId e usa a tabela do 1º, 2º ou 3º mar. A entrega ainda é manual.", true)
+
+UI.toggles.autoRaid = makeToggle(farmTab, "Auto Raid (ilha por ilha)", false, function(on)
+    State.autoRaid = on
+    if on then
+        if UI.toggles.autoQuest and UI.toggles.autoQuest.get() then
+            UI.toggles.autoQuest.set(false)
+        end
+
+        local q = pickQuest()
+        if not q then
+            setStatus("Auto raid: não foi possível ler o nível", true)
+            if UI.toggles.autoRaid then UI.toggles.autoRaid.set(false) end
+            return
+        end
+
+        State.raidKey = q.remote .. ":" .. tostring(q.questId)
+        startQuest(q)
+
+        if UI.toggles.autoFarm and not UI.toggles.autoFarm.get() then
+            State.raidStartedFarm = true
+            UI.toggles.autoFarm.set(true)
+        else
+            startFarm()
+        end
+
+        setStatus("Auto raid ligado: " .. q.mob .. " [Lv. " .. tostring(q.level) .. "]")
+        task.spawn(autoRaidLoop)
+    else
+        State.raidKey = nil
+        if State.raidStartedFarm then
+            State.raidStartedFarm = false
+            if UI.toggles.autoFarm and UI.toggles.autoFarm.get() then
+                UI.toggles.autoFarm.set(false)
+            end
+        end
+        setStatus("Auto raid desligado")
+    end
+end)
+
+makeLabel(farmTab, "Auto Raid avança sozinho: entrega a quest, sobe de nível e vai para o próximo mob/ilha.", true)
 
 makeSection(farmTab, "Mobs e farm")
 
@@ -2882,6 +3028,24 @@ UI.sliders.attackDelay = makeSlider(combatTab, "Delay do ataque (s)", 0.05, 0.5,
 end)
 
 makeLabel(combatTab, "Ataque rápido reduz o delay para ~0.03s. Mais DPS, mais detectável.", true)
+
+makeSection(combatTab, "Kill Aura")
+
+UI.toggles.killAura = makeToggle(combatTab, "Kill Aura (mata NPCs perto)", false, function(on)
+    State.killAura = on
+    if on then
+        task.spawn(killAuraLoop)
+        setStatus("Kill aura ligado (raio " .. CONFIG.killAuraRange .. " studs)")
+    else
+        setStatus("Kill aura desligado")
+    end
+end)
+
+UI.sliders.killAuraRange = makeSlider(combatTab, "Raio do Kill Aura (studs)", 10, 100, CONFIG.killAuraRange, function(v)
+    CONFIG.killAuraRange = v
+end)
+
+makeLabel(combatTab, "Kill Aura puxa e ataca os inimigos dentro do raio. Não afeta jogadores.", true)
 
 makeSection(combatTab, "Auto stats")
 

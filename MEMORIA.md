@@ -199,6 +199,11 @@ Não é bypass mágico. Reduz padrões detectáveis:
 - **Auto Farm escolhe o mob**: usa o mob selecionado na lista. Se nenhum estiver
   selecionado, escolhe automaticamente o mob mais forte que o nível do jogador
   permite. O alvo e o status mostram o nível.
+- **Auto Raid (ilha por ilha)**: usa a tabela de quests do mar atual, inicia a
+  quest, entrega via `CommF_:InvokeServer("CompleteQuest")` e, quando o nível
+  sobe, troca para o próximo mob/ilha automaticamente. Reaproveita o Auto Farm.
+- **Kill Aura**: puxa e ataca todos os inimigos dentro de um raio ajustável
+  (10–100 studs, padrão 30). Não afeta jogadores.
 - **UI reorganizada em 7 abas**: Farm, Boss, Combat, ESP, Util, Ilhas, Config.
   - Largura das abas: 58px, padding 3, texto 12 (cabe nas 424px úteis).
 - **ESP**: jogadores, bosses, frutas e baús. `Highlight` + `BillboardGui` com
@@ -353,3 +358,6 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
 - Sintaxe validada (`OK: sintaxe valida`).
 - Lista de mobs passou a mostrar nível e o Auto Farm escolhe automaticamente o
   mob mais forte que o nível do jogador permite (ou o mob clicado).
+- Adicionados **Auto Raid** (progressão ilha por ilha com entrega automática de
+  quest) e **Kill Aura** (raio ajustável de 10–100 studs). Kill switch e
+  save/load atualizados (`killAuraRange`). Sintaxe validada.
