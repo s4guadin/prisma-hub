@@ -1008,22 +1008,91 @@ local function stopBoss()
 end
 
 --==================== ALVOS EXTRAS ====================
--- Frutas ficam no Workspace como Tool com Handle. Baús são modelos/partes com
--- "Chest" no nome. Nada disso está em Workspace.Enemies.
+-- Frutas ficam no Workspace como Tool (ou Model) com Handle. As frutas que o
+-- servidor spawna aparecem como filhos diretos do Workspace e têm "Fruit" no
+-- nome; algumas variantes usam só o nome da fruta ("Rocket", "Dragon") ou o
+-- atributo OriginalName. A detecção abaixo cobre todos esses casos.
+local FRUIT_NAMES = {
+    barrier = true, blade = true, blizzard = true, bomb = true, buddha = true,
+    chop = true, control = true, creation = true, dark = true, diamond = true,
+    door = true, dough = true, dragon = true, eagle = true, falcon = true,
+    flame = true, gas = true, ghost = true, gravity = true, ice = true,
+    kilo = true, kitsune = true, leopard = true, light = true, lightning = true,
+    love = true, magma = true, mammoth = true, mochi = true, pain = true,
+    paw = true, phoenix = true, portal = true, quake = true, revive = true,
+    rocket = true, rubber = true, rumble = true, sand = true, shadow = true,
+    smoke = true, sound = true, spider = true, spike = true, spin = true,
+    spirit = true, spring = true, string = true, ["t-rex"] = true, venom = true,
+    yeti = true,
+}
+
+local function fruitHandle(obj)
+    if not obj then return nil end
+    return obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart", true)
+end
+
 local function isFruitTool(obj)
-    if not obj or not obj:IsA("Tool") then return false end
-    if not obj:FindFirstChild("Handle") then return false end
-    return string.find(string.lower(obj.Name), "fruit", 1, true) ~= nil
+    if not obj then return false end
+    local isTool = obj:IsA("Tool")
+    local isModel = obj:IsA("Model")
+    if not (isTool or isModel) then return false end
+    if not fruitHandle(obj) then return false end
+
+    local name = tostring(obj.Name)
+    local lower = string.lower(name)
+    if string.find(lower, "fruitspawn", 1, true) or string.find(lower, "dealer", 1, true) then
+        return false
+    end
+    if string.find(lower, "fruit", 1, true) then return true end
+
+    -- atributo OriginalName (ex. "Rocket-Rocket Fruit")
+    local okOrig, original = pcall(function() return obj:GetAttribute("OriginalName") end)
+    if okOrig and original ~= nil then
+        local ol = string.lower(tostring(original))
+        if string.find(ol, "fruit", 1, true) or string.find(ol, "-", 1, true) then
+            return true
+        end
+    end
+
+    if isTool then
+        -- ToolTip usado pelas frutas equipáveis
+        local okTip, tip = pcall(function() return obj.ToolTip end)
+        if okTip and tip == "Blox Fruit" then return true end
+
+        -- fruta no chão no formato "Rocket-Rocket"
+        if string.find(name, "-", 1, true) then return true end
+    end
+
+    -- nome simples da fruta (ex. "Rocket", "Dragon")
+    local base = string.lower(name:match("^([^%-%s]+)") or name)
+    if FRUIT_NAMES[base] == true then
+        if isTool then return true end
+        -- modelo só conta se tiver um Handle próprio (fruta no chão)
+        if obj:FindFirstChild("Handle") then return true end
+    end
+
+    return false
 end
 
 local function collectFruits()
     local list = {}
-    for _, obj in ipairs(Workspace:GetChildren()) do
-        if isFruitTool(obj) then
+    local seen = {}
+
+    local function add(obj)
+        if obj and not seen[obj] and isFruitTool(obj) then
+            seen[obj] = true
             table.insert(list, obj)
-        elseif obj:IsA("Folder") then
-            for _, inner in ipairs(obj:GetChildren()) do
-                if isFruitTool(inner) then table.insert(list, inner) end
+        end
+    end
+
+    for _, obj in ipairs(Workspace:GetChildren()) do
+        add(obj)
+        -- frutas spawnadas podem ficar em uma pasta (Fruits/FruitSpawn/...).
+        -- Só entramos em pastas com nome relacionado para não varrer o mapa.
+        if obj:IsA("Folder") then
+            local n = string.lower(obj.Name)
+            if string.find(n, "fruit", 1, true) or string.find(n, "spawn", 1, true) then
+                for _, inner in ipairs(obj:GetChildren()) do add(inner) end
             end
         end
     end
@@ -3741,7 +3810,7 @@ makeButton(espTab, "Puxar fruta selecionada (grab)", function()
         setStatus("Selecione uma fruta na lista", true)
         return
     end
-    local handle = State.fruitTarget:FindFirstChild("Handle")
+    local handle = fruitHandle(State.fruitTarget)
     local hrp = getHRP()
     if handle and hrp then
         pcall(function() handle.CFrame = hrp.CFrame end)

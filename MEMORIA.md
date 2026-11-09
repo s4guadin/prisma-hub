@@ -224,7 +224,12 @@ Não é bypass mágico. Reduz padrões detectáveis:
   - Largura das abas: 58px, padding 3, texto 12 (cabe nas 424px úteis).
 - **ESP**: jogadores, bosses, frutas e baús. `Highlight` + `BillboardGui` com
   nome e distância. Cache curto para não pesar (frutas 0.5s, baús 2s).
-- **Notificador de frutas**: avisa quando uma fruta nova aparece no chão.
+- **Notificador de frutas**: avisa quando uma fruta nova aparece no chão,
+  inclusive as que o **servidor spawna** (filhos diretos do `Workspace`). A
+  detecção aceita `Tool`/`Model` com `Handle` quando o nome contém "Fruit",
+  o `ToolTip` é `Blox Fruit`, existe `OriginalName` (com "-"), o nome tem "-"
+  (ex. "Rocket-Rocket") ou é o nome simples de uma fruta conhecida
+  (`FRUIT_NAMES`). Pastas com "fruit"/"spawn" no nome também são varridas.
 - **Lista de frutas + TP**: aba ESP lista frutas, teleporta e tem "Puxar fruta"
   (grab client-side do Handle).
 - **Auto Quest (1º/2º/3º mar)**: detecta o mar pelo `PlaceId` e usa a tabela de
@@ -411,3 +416,9 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
 - **Botão de reabrir no canto**: o "P" que reabre o hub saiu do centro e agora
   fica fixo no **canto superior direito** (`Position = UDim2.new(1, -58, 0, 12)`,
   `ZIndex = 50`).
+- **Notificador cobre frutas spawnadas pelo servidor**: `isFruitTool` foi
+  reescrito para aceitar `Tool` e `Model` com `Handle` e detectar por nome
+  ("Fruit"), `ToolTip == "Blox Fruit"`, `OriginalName`, nome com "-"
+  ("Rocket-Rocket") ou nome simples de fruta (`FRUIT_NAMES`, 50 frutas).
+  `collectFruits` também varre pastas com "fruit"/"spawn" no nome. "Puxar fruta"
+  passou a usar `fruitHandle` (funciona com Model também). Sintaxe validada.
