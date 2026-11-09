@@ -177,14 +177,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
 | Arquivo | O que é |
 |---|---|
 | `MEMORIA.md` | Este documento. Ler antes de abrir código. |
-| `hub.lua` | Prisma Hub 1.8.1 (arquivo único). |
+| `hub.lua` | Prisma Hub 1.8.2 (arquivo único). |
 | `teste.lua` | Teste mínimo de GUI (quadrado azul "GUI OK"). |
 
 ## 8. Estado atual
 
 - Planejamento: **completo** (este arquivo).
-- Código: **Fase 1.8.1** em `hub.lua`.
-- Versão atual: `1.8.1` (Prisma Hub).
+- Código: **Fase 1.8.2** em `hub.lua`.
+- Versão atual: `1.8.2` (Prisma Hub).
 
 ### Mudanças da 1.4 (pacote "Tudo" inspirado em hubs públicos)
 - **Renomeado para Prisma Hub** (`CONFIG.name`, título da janela, botão de reabrir "P").
@@ -465,4 +465,10 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   `Base-Base`, e só aceita nome simples de fruta quando é o nome inteiro
   ("Rocket"), nunca nome composto ("Ice Castle"). "Puxar fruta" revalida o alvo
   e usa só o `Handle` direto. `fruitHandle` e `fruitNameHasKnown` removidos.
+  Sintaxe validada.
+- **Kill switch / descarregar hub (1.8.2)**: botão **"PARAR TUDO"** no rodapé
+  da sidebar (sempre existiu). Adicionados atalhos **RightShift** (mostra/esconde
+  a janela) e **End** (roda o kill switch e destrói a GUI). Aba Config ganhou o
+  botão "Descarregar hub (parar tudo e fechar)". Ao reexecutar, o hub agora
+  remove ScreenGuis antigas com prefixo `PrismaUI_` para não empilhar interfaces.
   Sintaxe validada.

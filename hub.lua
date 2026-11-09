@@ -1,5 +1,5 @@
 --[[
-    Prisma Hub — 1.8.1
+    Prisma Hub — 1.8.2
     Arquivo único. PC. Sem key. Anti-detecção básica.
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
@@ -35,7 +35,7 @@ local bootOk, bootErr = pcall(function()
 --==================== CONFIG ====================
 local CONFIG = {
     name = "Prisma Hub",
-    version = "1.8.1",
+    version = "1.8.2",
 
     jitter = 0.30,
     maxErrors = 3,
@@ -3021,6 +3021,15 @@ local function new(class, props, parent)
     return inst
 end
 
+-- remove instâncias antigas do hub para não empilhar GUI ao reexecutar
+pcall(function()
+    for _, child in ipairs(GUI_PARENT:GetChildren()) do
+        if child:IsA("ScreenGui") and string.find(child.Name, "^PrismaUI_") then
+            child:Destroy()
+        end
+    end
+end)
+
 local gui = new("ScreenGui", {
     Name = "PrismaUI_" .. tostring(math.random(100000, 999999)),
     ResetOnSpawn = false,
@@ -3263,6 +3272,18 @@ end)
 reopen.MouseButton1Click:Connect(function()
     main.Visible = true
     reopen.Visible = false
+end)
+
+-- atalhos: RightShift mostra/esconde a janela; End descarrega o hub
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        main.Visible = not main.Visible
+        reopen.Visible = not main.Visible
+    elseif input.KeyCode == Enum.KeyCode.End then
+        safeCall(killSwitch)
+        pcall(function() gui:Destroy() end)
+    end
 end)
 
 --==================== WIDGETS ====================
@@ -4476,6 +4497,13 @@ end)
 makeButton(configTab, "Carregar config", function()
     loadConfig()
 end)
+
+makeLabel(configTab, "Atalhos: RightShift mostra/esconde a janela · End descarrega o hub.", true)
+
+makeButton(configTab, "Descarregar hub (parar tudo e fechar)", function()
+    killSwitch()
+    pcall(function() gui:Destroy() end)
+end, C.danger)
 
 makeButton(configTab, "TP para o spawn", function()
     local sp = Workspace:FindFirstChildWhichIsA("SpawnLocation", true)
