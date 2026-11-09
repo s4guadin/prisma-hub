@@ -9,7 +9,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/s4guadin/prisma-hub/m
 ## Recursos
 
 - **Farm** — lista mobs matáveis de `Workspace.Enemies` com nível; clique escolhe o mob do Auto Farm e, sem seleção, ele escolhe o melhor para o seu nível. Inclui **Farm instantâneo** (`SimulationRadius` + `Humanoid.Health = 0`), Auto Quest (1º/2º/3º mar) e ataque rápido.
-- **Raid** — aba dedicada ao **Auto Raid** de verdade: compra/equipa o Microchip, teleporta até o botão da raid, entra e limpa as ondas das 5 ilhas sozinho. Inclui seletor de chip, comprar chip, checar raid e Auto Awakening.
+- **Raid** — aba dedicada ao **Auto Raid** de verdade: compra/equipa o Microchip, teleporta até o botão da raid, entra e fica **pairando alto (~55 studs) sobre o centro de cada ilha**, matando na hora tudo o que aparece no raio (sem atacar). Só avança quando a ilha está limpa. Inclui seletor de chip, comprar chip, checar raid e Auto Awakening.
 - **Boss** — aba separada com bosses vivos no servidor, TP e Auto Boss.
 - **Combat** — Auto Skills Z/X/C (via `Tool.RemoteFunction`), Auto Ataque, Kill Aura instantâneo (mata mobs no raio via `SimulationRadius` + `Humanoid.Health = 0`), Auto Stats com atributo ciclável.
 - **ESP** — jogadores, bosses, frutas e baús (`Highlight` + `BillboardGui` com nome e distância).
@@ -42,4 +42,4 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/s4guadin/prisma-hub/m
 
 ## Versão
 
-`1.4` — Prisma Hub
+`1.6` — Prisma Hub

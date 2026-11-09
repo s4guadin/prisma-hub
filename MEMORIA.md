@@ -177,14 +177,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
 | Arquivo | O que é |
 |---|---|
 | `MEMORIA.md` | Este documento. Ler antes de abrir código. |
-| `hub.lua` | Prisma Hub 1.4 (arquivo único). |
+| `hub.lua` | Prisma Hub 1.6 (arquivo único). |
 | `teste.lua` | Teste mínimo de GUI (quadrado azul "GUI OK"). |
 
 ## 8. Estado atual
 
 - Planejamento: **completo** (este arquivo).
-- Código: **Fase 1.4** em `hub.lua`.
-- Versão atual: `1.4` (Prisma Hub).
+- Código: **Fase 1.6** em `hub.lua`.
+- Versão atual: `1.6` (Prisma Hub).
 
 ### Mudanças da 1.4 (pacote "Tudo" inspirado em hubs públicos)
 - **Renomeado para Prisma Hub** (`CONFIG.name`, título da janela, botão de reabrir "P").
@@ -204,9 +204,13 @@ Não é bypass mágico. Reduz padrões detectáveis:
   Sem chip, compra via `CommF_:InvokeServer("RaidsNpc", "Select", elemento)`;
   equipa o Microchip; teleporta para o tubo (`RAID_LOCATIONS[mar].tube`); dispara
   `ProximityPrompt`/`ClickDetector`/`TouchTransmitter` perto do botão; detecta a
-  raid por `Remotes.Raids` (`StartTimer`/`Finished`) ou pelo `RaidTimer` da HUD;
-  limpa as ondas matando o inimigo mais próximo (Farm instantâneo) e avança de
-  `Island 1` a `Island 5` via `_WorldOrigin.Locations`. Inclui seletor de chip,
+  raid por `Remotes.Raids` (`StartTimer`/`Finished`) ou pelo `RaidTimer` da HUD.
+  Durante a raid fica **pairando ~55 studs acima do centro da ilha** usando um
+  `BodyPosition` (`PrismaRaidHover`, `MaxForce` 1e6, `PlatformStand = true`),
+  alto o bastante para os mobs não acertarem. A cada ciclo aplica
+  `SimulationRadius` e zera o `Humanoid.Health` de **todos** os mobs no raio de
+  ~450 studs (morte/reset instantâneo, sem atacar). Só avança de `Island 1` a
+  `Island 5` depois de ~6 s sem nenhum mob na ilha. Inclui seletor de chip,
   comprar chip, checar raid e Auto Awakening (`Awakener Check/Awaken`).
 - **Kill Aura instantâneo**: usa o método dos hubs públicos
   `sethiddenproperty(LP, "SimulationRadius", math.huge)` +
@@ -393,3 +397,14 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   "Comprar chip", "Checar raid" e **Auto Awakening**. O antigo "Auto Raid (ilha
   por ilha)" de quests foi removido da aba Farm (o Auto Quest continua lá).
   Sintaxe validada.
+- **Auto Raid 1.6 (pairando, como o hub público testado)**: durante a raid o
+  personagem fica pairando a ~55 studs acima do centro da ilha via `BodyPosition`
+  (`PrismaRaidHover`) + `PlatformStand`, longe do alcance dos mobs. A cada ciclo
+  aplica `forceSimulationRadius()` e zera o `Humanoid.Health` de **todos** os
+  mobs dentro de ~450 studs (morte/reset instantâneo, sem ataque nem TP por
+  mob). Só troca de ilha após ~6 s sem mobs (`State.raidIsland`,
+  `State.raidClearSince`). O hover é removido ao desligar o Auto Raid, ao acabar
+  a raid, no kill switch e ao voltar para o tubo. Ligar o Auto Raid desliga o
+  Fly (BodyVelocity brigaria com o BodyPosition). Novos helpers:
+  `raidSetHover`, `raidStopHover`, `raidCurrentIsland`, `raidIslandPart`,
+  `raidMobsNear`. Versão 1.6. Sintaxe validada.

@@ -1,11 +1,11 @@
 --[[
-    Prisma Hub — 1.5
+    Prisma Hub — 1.6
     Arquivo único. PC. Sem key. Anti-detecção básica.
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
-    Novidades 1.4: ESP (jogadores/bosses/frutas/baús), notificador de frutas,
-    lista + TP de frutas, Auto Quest (1º/2º/3º mar), Auto Raid (raid de verdade),
-    Auto Skills Z/X/C, Kill Aura instantâneo, ataque rápido,
+    Novidades 1.6: ESP (jogadores/bosses/frutas/baús), notificador de frutas,
+    lista + TP de frutas, Auto Quest (1º/2º/3º mar), Auto Raid pairando alto e
+    matando na hora, Auto Skills Z/X/C, Kill Aura instantâneo, ataque rápido,
     Auto Stats, server hop, auto rejoin, fly, noclip e pulo infinito.
     UI estilo hub genérico: sidebar, tema escuro e acento violeta.
 ]]
@@ -34,7 +34,7 @@ local bootOk, bootErr = pcall(function()
 --==================== CONFIG ====================
 local CONFIG = {
     name = "Prisma Hub",
-    version = "1.5",
+    version = "1.6",
 
     jitter = 0.30,
     maxErrors = 3,
@@ -209,6 +209,8 @@ local State = {
     raidLastStart = 0,
     raidRunning = false,
     raidNoTimerSince = nil,
+    raidIsland = nil,
+    raidClearSince = nil,
     autoAwaken = false,
     awakenRunning = false,
     instantFarm = true,
@@ -1444,7 +1446,13 @@ end
 --==================== RAID ====================
 -- Auto Raid completo (método usado em hubs públicos, ex. Sankeurr/nyannos):
 -- compra/equipa o Microchip, vai até o botão da raid, dispara os prompts e
--- limpa as ondas matando os mobs de cada ilha.
+-- limpa as ondas. Durante a raid o personagem fica pairando (BodyPosition)
+-- acima do centro da ilha, alto o bastante para os mobs não acertarem, e mata
+-- na hora tudo o que aparece no raio — sem precisar atacar.
+
+local RAID_HOVER_HEIGHT = 55   -- studs acima do centro da ilha
+local RAID_KILL_RADIUS = 450   -- raio de morte ao redor do centro da ilha
+local RAID_WAVE_GRACE = 6      -- segundos sem mobs antes de ir para a próxima ilha
 
 local function isRaidChip(t)
     if not t or not t:IsA("Tool") then return false end
@@ -1503,6 +1511,97 @@ local function raidTimerVisible()
     return ok and visible == true
 end
 
+-- Mantém o personagem parado no ar (pairando) em uma posição.
+-- Usa BodyPosition para segurar o HRP, sem precisar de fly.
+local function raidSetHover(pos)
+    local hrp = getHRP()
+    local hum = getHum()
+    if not hrp or not pos then return false end
+
+    local old = hrp:FindFirstChild("PrismaRaidHover")
+    if old and old:IsA("BodyPosition") then
+        old.Position = pos
+        return true
+    end
+    if old then pcall(function() old:Destroy() end) end
+
+    if hum then
+        pcall(function()
+            hum.PlatformStand = true
+            hum.Sit = false
+        end)
+    end
+
+    local bp = Instance.new("BodyPosition")
+    bp.Name = "PrismaRaidHover"
+    bp.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+    bp.P = 10000
+    bp.D = 1000
+    bp.Position = pos
+    bp.Parent = hrp
+    return true
+end
+
+local function raidStopHover()
+    local hrp = getHRP()
+    if hrp then
+        local bp = hrp:FindFirstChild("PrismaRaidHover")
+        if bp then pcall(function() bp:Destroy() end) end
+    end
+    if not State.fly then
+        local hum = getHum()
+        if hum then pcall(function() hum.PlatformStand = false end) end
+    end
+end
+
+local function raidLocations()
+    local worldOrigin = Workspace:FindFirstChild("_WorldOrigin")
+    return worldOrigin and worldOrigin:FindFirstChild("Locations")
+end
+
+local function raidIslandPart(idx)
+    local locations = raidLocations()
+    return locations and locations:FindFirstChild("Island " .. tostring(idx))
+end
+
+-- ilha mais próxima do personagem (só para sincronizar no começo da raid)
+local function raidCurrentIsland()
+    local locations = raidLocations()
+    local hrp = getHRP()
+    if not (locations and hrp) then return nil end
+
+    local bestIdx, bestDist = nil, math.huge
+    for i = 1, 5 do
+        local island = locations:FindFirstChild("Island " .. i)
+        if island then
+            local d = (hrp.Position - island.Position).Magnitude
+            if d < bestDist then
+                bestDist = d
+                bestIdx = i
+            end
+        end
+    end
+    return bestIdx
+end
+
+-- mobs vivos ao redor de um ponto, ordenados por distância
+local function raidMobsNear(origin, radius)
+    local list = {}
+    if not origin then return list end
+    for _, mob in ipairs(collectEnemies()) do
+        local mhrp = mob:FindFirstChild("HumanoidRootPart")
+        local hum = mob:FindFirstChildOfClass("Humanoid")
+        if mhrp and hum and hum.Health > 0 then
+            local d = (mhrp.Position - origin).Magnitude
+            if d <= (radius or RAID_KILL_RADIUS) then
+                table.insert(list, { mob = mob, hum = hum, dist = d })
+            end
+        end
+    end
+    table.sort(list, function(a, b) return a.dist < b.dist end)
+    return list
+end
+
 local function setRaidStatus(text, isError)
     State.raidStatus = text
     if UI.raidStatusLabel then UI.raidStatusLabel.Text = "Status: " .. text end
@@ -1518,9 +1617,14 @@ local function setupRaidListener()
     State.raidConn = raids.OnClientEvent:Connect(function(kind)
         if kind == "StartTimer" then
             State.raidInRaid = true
+            State.raidIsland = raidCurrentIsland() or 1
+            State.raidClearSince = nil
             setRaidStatus("Raid iniciada")
         elseif kind == "Finished" then
             State.raidInRaid = false
+            State.raidIsland = nil
+            State.raidClearSince = nil
+            raidStopHover()
             setRaidStatus("Raid finalizada")
         end
     end)
@@ -1554,54 +1658,6 @@ local function raidTriggerAround(pos, radius)
     return fired
 end
 
-local function raidNearestEnemy()
-    local hrp = getHRP()
-    if not hrp then return nil end
-    local best, bestDist = nil, math.huge
-    for _, mob in ipairs(collectEnemies()) do
-        local mhrp = mob:FindFirstChild("HumanoidRootPart")
-        local hum = mob:FindFirstChildOfClass("Humanoid")
-        if mhrp and hum and hum.Health > 0 then
-            local d = (mhrp.Position - hrp.Position).Magnitude
-            if d < bestDist then
-                bestDist = d
-                best = mob
-            end
-        end
-    end
-    return best, bestDist
-end
-
-local function raidMoveNextIsland()
-    local worldOrigin = Workspace:FindFirstChild("_WorldOrigin")
-    local locations = worldOrigin and worldOrigin:FindFirstChild("Locations")
-    local hrp = getHRP()
-    if not (locations and hrp) then return false end
-
-    local currentIdx, currentDist = nil, math.huge
-    for i = 1, 5 do
-        local island = locations:FindFirstChild("Island " .. i)
-        if island then
-            local d = (hrp.Position - island.Position).Magnitude
-            if d < currentDist then
-                currentDist = d
-                currentIdx = i
-            end
-        end
-    end
-
-    if currentIdx and currentIdx < 5 then
-        local nextIsland = locations:FindFirstChild("Island " .. (currentIdx + 1))
-        if nextIsland then
-            teleport(nextIsland.Position + Vector3.new(0, 45, 120), nil, true, function()
-                return not State.autoRaid
-            end)
-            return true
-        end
-    end
-    return false
-end
-
 local function raidLoop()
     if State.raidRunning then return end
     State.raidRunning = true
@@ -1611,6 +1667,10 @@ local function raidLoop()
 
             local timer = raidTimerVisible()
             if timer then
+                if not State.raidInRaid then
+                    State.raidIsland = raidCurrentIsland() or 1
+                    State.raidClearSince = nil
+                end
                 State.raidInRaid = true
                 State.raidNoTimerSince = nil
             elseif State.raidInRaid then
@@ -1618,33 +1678,67 @@ local function raidLoop()
                 if os.clock() - State.raidNoTimerSince > 12 then
                     State.raidInRaid = false
                     State.raidNoTimerSince = nil
+                    State.raidIsland = nil
+                    State.raidClearSince = nil
+                    raidStopHover()
                 end
             end
 
             local inRaid = State.raidInRaid
             if inRaid then
                 State.raidInRaid = true
-                local mob = raidNearestEnemy()
-                if mob then
-                    local mhrp = mob:FindFirstChild("HumanoidRootPart")
-                    local hrp = getHRP()
-                    if mhrp and hrp and (mhrp.Position - hrp.Position).Magnitude > 25 then
-                        teleport(mhrp.Position + Vector3.new(0, 12, 0), nil, true, function()
-                            return not State.autoRaid
-                        end)
-                    end
-                    boostTarget(mob)
-                    instantKillMob(mob)
-                    attackOnce()
-                    setRaidStatus("Raid: limpando ondas")
+
+                local idx = State.raidIsland or raidCurrentIsland() or 1
+                local island = raidIslandPart(idx)
+                if not island then
+                    idx = 1
+                    island = raidIslandPart(1)
+                end
+                State.raidIsland = idx
+
+                local origin = island and island.Position or (getHRP() and getHRP().Position)
+                if origin then
+                    raidSetHover(origin + Vector3.new(0, RAID_HOVER_HEIGHT, 0))
+                end
+
+                -- cliente passa a simular os mobs; a morte zera a vida e replica
+                local simOk = forceSimulationRadius()
+
+                if not simOk then
+                    setRaidStatus("Raid: executor sem sethiddenproperty (morte instantânea indisponível)", true)
                 else
-                    if not raidMoveNextIsland() then
-                        setRaidStatus("Raid: esperando próxima onda")
+                    local mobs = raidMobsNear(origin, RAID_KILL_RADIUS)
+                    local killed = 0
+                    for _, entry in ipairs(mobs) do
+                        local hum = entry.hum
+                        if hum and hum.Parent and hum.Health > 0 then
+                            pcall(function() hum.Health = 0 end)
+                            killed = killed + 1
+                        end
+                    end
+
+                    if #mobs > 0 then
+                        State.raidClearSince = nil
+                        setRaidStatus("Raid: ilha " .. tostring(idx) .. " - " .. killed .. " mobs mortos")
                     else
-                        setRaidStatus("Raid: indo para a próxima ilha")
+                        State.raidClearSince = State.raidClearSince or os.clock()
+                        local waited = os.clock() - State.raidClearSince
+                        if waited >= RAID_WAVE_GRACE and idx < 5 then
+                            State.raidIsland = idx + 1
+                            State.raidClearSince = nil
+                            setRaidStatus("Raid: ilha " .. tostring(State.raidIsland) .. " (avançando)")
+                        elseif idx >= 5 then
+                            setRaidStatus("Raid: ilha 5 - esperando o boss/onda")
+                        else
+                            setRaidStatus("Raid: ilha " .. tostring(idx) .. " - esperando mobs")
+                        end
                     end
                 end
             else
+                raidStopHover()
+                State.raidIsland = nil
+                State.raidClearSince = nil
+
                 local now = os.clock()
                 if now - State.raidLastStart >= 6 then
                     State.raidLastStart = now
@@ -1682,6 +1776,7 @@ local function raidLoop()
         if not ok then
             if trackError("raid") then
                 State.autoRaid = false
+                raidStopHover()
                 if UI.toggles.autoRaid then UI.toggles.autoRaid.set(false) end
                 setRaidStatus("Auto Raid desligado (erros)", true)
             end
@@ -1691,6 +1786,9 @@ local function raidLoop()
 
         task.wait(0.5)
     end
+    raidStopHover()
+    State.raidIsland = nil
+    State.raidClearSince = nil
     State.raidRunning = false
 end
 
@@ -2366,6 +2464,8 @@ local function killSwitch()
     State.raidKey = nil
     State.raidStartedFarm = false
     State.raidInRaid = false
+    State.raidIsland = nil
+    State.raidClearSince = nil
     State.autoAwaken = false
     State.killAura = false
     State.autoStats = false
@@ -2377,6 +2477,7 @@ local function killSwitch()
     State.infiniteJump = false
 
     stopFly()
+    raidStopHover()
     applyNoclip(false)
     setAutoRejoin(false)
     clearESP()
@@ -3291,7 +3392,7 @@ end
 --==================== ABA RAID ====================
 local raidTab = makeTab("Raid", 2)
 
-makeLabel(raidTab, "Auto Raid completo: compra/equipa o Microchip, entra na raid e limpa as ondas sozinho.", true)
+makeLabel(raidTab, "Auto Raid completo: compra/equipa o Microchip, entra na raid, fica pairando alto sobre cada ilha e mata os mobs na hora.", true)
 
 makeSection(raidTab, "Auto Raid")
 
@@ -3329,6 +3430,14 @@ UI.toggles.autoRaid = makeToggle(raidTab, "Auto Raid", false, function(on)
         if UI.toggles.autoQuest and UI.toggles.autoQuest.get() then
             UI.toggles.autoQuest.set(false)
         end
+        -- fly usa BodyVelocity e brigaria com o hover da raid
+        if State.fly then
+            if UI.toggles.fly and UI.toggles.fly.get() then
+                UI.toggles.fly.set(false)
+            else
+                stopFly()
+            end
+        end
         if UI.toggles.instantFarm and not UI.toggles.instantFarm.get() then
             UI.toggles.instantFarm.set(true)
         else
@@ -3336,11 +3445,16 @@ UI.toggles.autoRaid = makeToggle(raidTab, "Auto Raid", false, function(on)
             forceSimulationRadius()
         end
         State.raidLastStart = 0
+        State.raidIsland = nil
+        State.raidClearSince = nil
         setupRaidListener()
         task.spawn(raidLoop)
         setRaidStatus("Auto Raid ligado (chip " .. State.raidElement .. ")")
     else
         State.raidInRaid = false
+        State.raidIsland = nil
+        State.raidClearSince = nil
+        raidStopHover()
         setRaidStatus("Auto Raid desligado")
     end
 end)
@@ -3363,7 +3477,7 @@ makeLabel(raidTab, "Awakening usa CommF_ Awakener Check/Awaken a cada 2.5s.", tr
 
 makeSection(raidTab, "Ilhas da raid")
 
-makeLabel(raidTab, "O Auto Raid avança de Island 1 até Island 5 enquanto houver onda de mobs.", true)
+makeLabel(raidTab, "O Auto Raid fica pairando ~55 studs acima do centro da ilha, mata tudo no raio e só avança quando a ilha está limpa.", true)
 
 --==================== ABA BOSS ====================
 local bossTab = makeTab("Boss", 3)
