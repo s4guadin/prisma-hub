@@ -1,5 +1,5 @@
 --[[
-    Prisma Hub — 1.8.3
+    Prisma Hub — 1.8.4
     Arquivo único. PC. Sem key. Anti-detecção básica.
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
@@ -49,7 +49,7 @@ local bootOk, bootErr = pcall(function()
 --==================== CONFIG ====================
 local CONFIG = {
     name = "Prisma Hub",
-    version = "1.8.3",
+    version = "1.8.4",
 
     jitter = 0.30,
     maxErrors = 3,
@@ -3708,7 +3708,11 @@ local function makeTab(name, order)
     return frame
 end
 
+-- Cada aba fica no seu próprio bloco (do..end). O Luau limita 200 registros
+-- por função e, sem separar, o boot estoura o limite ao compilar em -O0.
+
 --==================== ABA FARM ====================
+do
 local farmTab = makeTab("Farm", 1)
 
 makeLabel(farmTab, "Mobs matáveis do servidor (Workspace.Enemies), com nível. Clique para escolher o mob do Auto Farm.", true)
@@ -3871,7 +3875,10 @@ UI.refreshMobs = function()
     setStatus("Mobs: " .. #list .. " tipos, " .. total .. " no servidor")
 end
 
+end -- Farm
+
 --==================== ABA RAID ====================
+do
 local raidTab = makeTab("Raid", 2)
 
 makeLabel(raidTab, "Auto Raid completo: compra/equipa o Microchip, entra na raid, fica pairando alto sobre cada ilha e mata os mobs na hora.", true)
@@ -3961,7 +3968,10 @@ makeSection(raidTab, "Ilhas da raid")
 
 makeLabel(raidTab, "O Auto Raid fica pairando ~55 studs acima do centro da ilha, mata tudo no raio e só avança quando a ilha está limpa.", true)
 
+end -- Raid
+
 --==================== ABA BOSS ====================
+do
 local bossTab = makeTab("Boss", 3)
 
 makeLabel(bossTab, "Bosses vivos no servidor. Clique para selecionar e ligue o Auto Boss.", true)
@@ -4057,7 +4067,10 @@ UI.refreshBosses = function()
     setStatus("Bosses: " .. #list .. " tipos, " .. total .. " no servidor")
 end
 
+end -- Boss
+
 --==================== ABA COMBAT ====================
+do
 local combatTab = makeTab("Combat", 4)
 
 makeLabel(combatTab, "Skills usam o RemoteFunction da arma equipada (Z/X/C). Precisa de alvo vivo perto.", true)
@@ -4161,7 +4174,10 @@ UI.statBtn = statBtn
 
 makeLabel(combatTab, "Auto Stats gasta os pontos via CommF_ AddStat, 1 por ciclo.", true)
 
+end -- Combat
+
 --==================== ABA ESP ====================
+do
 local espTab = makeTab("ESP", 5)
 
 makeLabel(espTab, "Destaques no mundo. Desligue se o FPS cair.", true)
@@ -4325,7 +4341,10 @@ UI.refreshFruits = function()
     setStatus("Frutas no chão: " .. #list)
 end
 
+end -- ESP
+
 --==================== ABA UTIL ====================
+do
 local utilTab = makeTab("Util", 6)
 
 makeLabel(utilTab, "Clique em um jogador para selecionar. Use o toggle para TP ou espectar.", true)
@@ -4465,6 +4484,8 @@ UI.refreshPlayers = function()
         addListButton(playerList, "Nenhum outro jogador", function() end, C.panel)
     end
 end
+
+end -- Util
 
 --==================== ABA ILHAS ====================
 local islandsTab = makeTab("Ilhas", 7)

@@ -42,4 +42,4 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/s4guadin/prisma-hub/m
 
 ## Versão
 
-`1.8.3` - Prisma Hub
+`1.8.4` - Prisma Hub

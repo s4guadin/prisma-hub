@@ -177,14 +177,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
 | Arquivo | O que é |
 |---|---|
 | `MEMORIA.md` | Este documento. Ler antes de abrir código. |
-| `hub.lua` | Prisma Hub 1.8.3 (arquivo único). |
+| `hub.lua` | Prisma Hub 1.8.4 (arquivo único). |
 | `teste.lua` | Teste mínimo de GUI (quadrado azul "GUI OK"). |
 
 ## 8. Estado atual
 
 - Planejamento: **completo** (este arquivo).
-- Código: **Fase 1.8.3** em `hub.lua`.
-- Versão atual: `1.8.3` (Prisma Hub).
+- Código: **Fase 1.8.4** em `hub.lua`.
+- Versão atual: `1.8.4` (Prisma Hub).
 
 ### Mudanças da 1.4 (pacote "Tudo" inspirado em hubs públicos)
 - **Renomeado para Prisma Hub** (`CONFIG.name`, título da janela, botão de reabrir "P").
@@ -479,3 +479,11 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   parent. Se a ScreenGui não for aceita, ela é reparentada no `PlayerGui`. Logs
   `warn("[Prisma] ...")` mostram o parent e falhas de boot no console (F9).
   Sintaxe validada.
+- **Correção do limite de 200 registros do Luau (1.8.4)**: o hub inteiro roda
+  dentro de um `pcall(function() ... end)`; em compilação `-O0` (a que alguns
+  executores usam) o boot estourava `Out of local registers ... exceeded limit
+  200` ao chegar em `goIsland`/`espTab`, e o `loadstring` devolvia nil (o erro
+  aparecia como "attempt to call a nil value"). Cada aba (Farm, Raid, Boss,
+  Combat, ESP, Util) agora fica no seu próprio bloco `do ... end`, liberando os
+  registradores antes da aba seguinte. Validado com `luau-compile -O0`, `-O1` e
+  `-O2` (todos exit=0) e com `luaparse`. Sintaxe validada.
