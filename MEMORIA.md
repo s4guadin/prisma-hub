@@ -193,6 +193,12 @@ Não é bypass mágico. Reduz padrões detectáveis:
   acento violeta `#7C5CFF`, cabeçalhos de seção em maiúsculas, toggles em
   formato pílula, sliders com valor separado, hover em botões e scrollbars finas.
 - Config salva em `prisma_config.json`; ScreenGui nomeada `PrismaUI_<random>`.
+- **Lista de mobs com nível**: mostra `Nome [Lv. X] (quantidade)`, lido do
+  atributo/`DisplayName`/BillboardGui do mob ou, como fallback, da tabela de
+  quests. Lista ordenada por nível.
+- **Auto Farm escolhe o mob**: usa o mob selecionado na lista. Se nenhum estiver
+  selecionado, escolhe automaticamente o mob mais forte que o nível do jogador
+  permite. O alvo e o status mostram o nível.
 - **UI reorganizada em 7 abas**: Farm, Boss, Combat, ESP, Util, Ilhas, Config.
   - Largura das abas: 58px, padding 3, texto 12 (cabe nas 424px úteis).
 - **ESP**: jogadores, bosses, frutas e baús. `Highlight` + `BillboardGui` com
@@ -345,3 +351,5 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   quando o farm/boss é desligado, ajudando o farm em ilhas distantes do 2º/3º mar.
 - Referência das quests: repositório aberto `Sankeurr/OpenSource-Blox-Fruits-Script`.
 - Sintaxe validada (`OK: sintaxe valida`).
+- Lista de mobs passou a mostrar nível e o Auto Farm escolhe automaticamente o
+  mob mais forte que o nível do jogador permite (ou o mob clicado).

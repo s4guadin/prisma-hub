@@ -164,6 +164,7 @@ local State = {
     attacking = false,
     farming = false,
     farmTarget = "",
+    farmTargetLevel = nil,
     bossFarming = false,
     bossTarget = "",
     lastToolName = nil,
@@ -659,6 +660,70 @@ local function nearestEnemy(name)
     return best, bestDist
 end
 
+--==================== NÍVEL DOS MOBS ====================
+-- Preenchido com a tabela de quests mais abaixo (nome -> nível).
+local MOB_LEVELS = {}
+
+local function parseLevelFromText(text)
+    if type(text) ~= "string" then return nil end
+    local lv = text:match("[Ll][Vv]%.?%s*(%d+)")
+    if lv then return tonumber(lv) end
+    lv = text:match("%[(%d+)%]")
+    return lv and tonumber(lv)
+end
+
+local function readGuiLevel(gui)
+    if not gui then return nil end
+    for _, d in ipairs(gui:GetDescendants()) do
+        if d:IsA("TextLabel") then
+            local lv = parseLevelFromText(d.Text)
+            if lv then return lv end
+        end
+    end
+    return nil
+end
+
+-- Tenta ler o nível do próprio mob; se não achar, usa a tabela de quests.
+local function getMobLevel(mob)
+    if type(mob) == "string" then return MOB_LEVELS[mob] end
+    if not mob then return nil end
+
+    local ok, lvl = pcall(function()
+        local attr = mob:GetAttribute("Level")
+        if attr then return tonumber(attr) end
+
+        local levelObj = mob:FindFirstChild("Level")
+        if levelObj and levelObj:IsA("ValueBase") then
+            local v = tonumber(levelObj.Value)
+            if v then return v end
+        end
+
+        local hum = mob:FindFirstChildOfClass("Humanoid")
+        if hum then
+            local v = parseLevelFromText(hum.DisplayName)
+            if v then return v end
+        end
+
+        local vName = parseLevelFromText(mob.Name)
+        if vName then return vName end
+
+        local head = mob:FindFirstChild("Head")
+        if head then
+            local gui = head:FindFirstChildOfClass("BillboardGui")
+            local v = readGuiLevel(gui)
+            if v then return v end
+        end
+
+        local gui2 = mob:FindFirstChildOfClass("BillboardGui")
+        local v2 = readGuiLevel(gui2)
+        if v2 then return v2 end
+        return nil
+    end)
+
+    if ok and lvl then return lvl end
+    return MOB_LEVELS[mob.Name]
+end
+
 -- agrupado por nome. onlyBoss=true -> só bosses; false -> só mobs comuns
 local function listEnemies(onlyBoss)
     local map = {}
@@ -667,7 +732,7 @@ local function listEnemies(onlyBoss)
         if (onlyBoss and boss) or ((not onlyBoss) and not boss) then
             local name = obj.Name
             if not map[name] then
-                map[name] = { name = name, count = 0 }
+                map[name] = { name = name, count = 0, level = getMobLevel(obj) }
             end
             map[name].count = map[name].count + 1
         end
@@ -677,8 +742,39 @@ local function listEnemies(onlyBoss)
     for _, v in pairs(map) do
         table.insert(list, v)
     end
-    table.sort(list, function(a, b) return a.name < b.name end)
+    table.sort(list, function(a, b)
+        if (a.level or 0) ~= (b.level or 0) then
+            return (a.level or 0) < (b.level or 0)
+        end
+        return a.name < b.name
+    end)
     return list
+end
+
+-- escolhe o mob mais forte que o jogador já pode matar (nível <= nível do player)
+local function playerLevel()
+    local ok, lvl = pcall(function()
+        local data = LP:FindFirstChild("Data")
+        local level = data and data:FindFirstChild("Level")
+        return level and tonumber(level.Value)
+    end)
+    if ok then return lvl end
+    return nil
+end
+
+local function bestMobForLevel(list)
+    if #list == 0 then return nil end
+    local lvl = playerLevel()
+    if not lvl then return list[1] end
+
+    local best, bestLevel = nil, -math.huge
+    for _, e in ipairs(list) do
+        local eLvl = e.level
+        if eLvl and eLvl <= lvl and eLvl >= bestLevel then
+            best, bestLevel = e, eLvl
+        end
+    end
+    return best or list[1]
 end
 
 --==================== FARM ====================
@@ -1201,6 +1297,16 @@ local function questListForSea()
     return QUESTS[sea] or QUESTS[1]
 end
 
+-- mapa nome -> nível, usado na lista de mobs (fallback quando o jogo não expõe)
+for _, seaList in pairs(QUESTS) do
+    for _, q in ipairs(seaList) do
+        local current = MOB_LEVELS[q.mob]
+        if current == nil or q.level < current then
+            MOB_LEVELS[q.mob] = q.level
+        end
+    end
+end
+
 local function getLevel()
     local ok, lvl = pcall(function()
         local data = LP:FindFirstChild("Data")
@@ -1227,8 +1333,9 @@ local function startQuest(q)
     local ok = fireRemote("CommF_", "StartQuest", q.remote, q.questId)
     if ok then
         State.farmTarget = q.mob
+        State.farmTargetLevel = q.level
         if UI.targetLabel then
-            UI.targetLabel.Text = "Alvo: " .. q.mob .. " (quest)"
+            UI.targetLabel.Text = "Alvo: " .. q.mob .. "  [Lv. " .. tostring(q.level) .. "] (quest)"
         end
     end
     return ok
@@ -1794,6 +1901,7 @@ local function loadConfig()
 
     if type(data.farmTarget) == "string" then
         State.farmTarget = data.farmTarget
+        State.farmTargetLevel = MOB_LEVELS[data.farmTarget]
     end
     if tonumber(data.attackDelay) and UI.sliders.attackDelay then
         UI.sliders.attackDelay.set(tonumber(data.attackDelay))
@@ -2480,7 +2588,7 @@ end
 --==================== ABA FARM ====================
 local farmTab = makeTab("Farm", 1)
 
-makeLabel(farmTab, "Mobs matáveis do servidor (Workspace.Enemies). Clique para selecionar e ligue o Auto Farm.", true)
+makeLabel(farmTab, "Mobs matáveis do servidor (Workspace.Enemies), com nível. Clique para escolher o mob do Auto Farm.", true)
 local seaNamesFarm = { [1] = "1º mar", [2] = "2º mar", [3] = "3º mar" }
 makeLabel(farmTab, "Mar detectado: " .. (seaNamesFarm[CURRENT_SEA or 1] or "desconhecido"))
 
@@ -2506,7 +2614,7 @@ UI.toggles.autoQuest = makeToggle(farmTab, "Auto Quest (todos os mares)", false,
             startFarm()
         end
 
-        setStatus("Auto quest (mar " .. tostring(CURRENT_SEA or 1) .. "): " .. q.mob .. " (lvl " .. tostring(getLevel()) .. ")")
+        setStatus("Auto quest (mar " .. tostring(CURRENT_SEA or 1) .. "): " .. q.mob .. " [Lv. " .. tostring(q.level) .. "] (seu nível " .. tostring(getLevel()) .. ")")
         task.spawn(questLoop)
     else
         if State.questStartedFarm then
@@ -2528,12 +2636,28 @@ makeLabel(farmTab, "Auto Quest detecta o mar pelo PlaceId e usa a tabela do 1º,
 
 makeSection(farmTab, "Mobs e farm")
 
+makeLabel(farmTab, "Auto Farm usa o mob selecionado. Sem seleção, escolhe o mob mais forte que o seu nível permite.", true)
+
 makeButton(farmTab, "Atualizar lista de mobs", function()
     if UI.refreshMobs then UI.refreshMobs() end
 end)
 
 local mobList = makeScrollList(farmTab, 160)
 UI.lists.mobs = mobList
+
+local function mobText(name, level, count)
+    local lv = level and ("Lv. " .. tostring(level)) or "Lv. ?"
+    local suffix = count and ("  (" .. count .. ")") or ""
+    return name .. "  [" .. lv .. "]" .. suffix
+end
+
+local function setFarmTarget(name, level, count)
+    State.farmTarget = name
+    State.farmTargetLevel = level
+    if UI.targetLabel then
+        UI.targetLabel.Text = "Alvo: " .. mobText(name, level, count)
+    end
+end
 
 UI.targetLabel = makeLabel(farmTab, "Alvo: nenhum")
 
@@ -2561,10 +2685,8 @@ UI.toggles.autoFarm = makeToggle(farmTab, "Auto Farm", false, function(on)
         if State.farmTarget == "" then
             local list = listEnemies(false)
             if #list > 0 then
-                State.farmTarget = list[1].name
-                if UI.targetLabel then
-                    UI.targetLabel.Text = "Alvo: " .. list[1].name .. " (" .. list[1].count .. ")"
-                end
+                local pick = bestMobForLevel(list)
+                setFarmTarget(pick.name, pick.level, pick.count)
             else
                 setStatus("Nenhum mob matável encontrado no servidor", true)
                 if UI.toggles.autoFarm then UI.toggles.autoFarm.set(false) end
@@ -2572,7 +2694,8 @@ UI.toggles.autoFarm = makeToggle(farmTab, "Auto Farm", false, function(on)
             end
         end
         startFarm()
-        setStatus("Auto farm ligado: " .. State.farmTarget)
+        local lvl = State.farmTargetLevel or MOB_LEVELS[State.farmTarget]
+        setStatus("Auto farm ligado: " .. State.farmTarget .. (lvl and (" [Lv. " .. lvl .. "]") or ""))
     else
         stopFarm()
         setStatus("Auto farm desligado")
@@ -2602,12 +2725,9 @@ UI.refreshMobs = function()
     local total = 0
     for _, entry in ipairs(list) do
         total = total + entry.count
-        addListButton(mobList, entry.name .. "  (" .. entry.count .. ")", function()
-            State.farmTarget = entry.name
-            if UI.targetLabel then
-                UI.targetLabel.Text = "Alvo: " .. entry.name .. " (" .. entry.count .. ")"
-            end
-            setStatus("Alvo selecionado: " .. entry.name)
+        addListButton(mobList, mobText(entry.name, entry.level, entry.count), function()
+            setFarmTarget(entry.name, entry.level, entry.count)
+            setStatus("Alvo selecionado: " .. mobText(entry.name, entry.level))
         end)
     end
 
@@ -2656,7 +2776,7 @@ UI.toggles.autoBoss = makeToggle(bossTab, "Auto Boss", false, function(on)
             if #list > 0 then
                 State.bossTarget = list[1].name
                 if UI.bossLabel then
-                    UI.bossLabel.Text = "Boss: " .. list[1].name .. " (" .. list[1].count .. ")"
+                    UI.bossLabel.Text = "Boss: " .. mobText(list[1].name, list[1].level, list[1].count)
                 end
             else
                 setStatus("Nenhum boss vivo no servidor", true)
@@ -2698,12 +2818,12 @@ UI.refreshBosses = function()
     local total = 0
     for _, entry in ipairs(list) do
         total = total + entry.count
-        addListButton(bossList, entry.name .. "  (" .. entry.count .. ")", function()
+        addListButton(bossList, mobText(entry.name, entry.level, entry.count), function()
             State.bossTarget = entry.name
             if UI.bossLabel then
-                UI.bossLabel.Text = "Boss: " .. entry.name .. " (" .. entry.count .. ")"
+                UI.bossLabel.Text = "Boss: " .. mobText(entry.name, entry.level, entry.count)
             end
-            setStatus("Boss selecionado: " .. entry.name)
+            setStatus("Boss selecionado: " .. mobText(entry.name, entry.level))
         end)
     end
 
