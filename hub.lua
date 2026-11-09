@@ -5,7 +5,7 @@
     espectar, anti-AFK, kill switch e save/load.
     Novidades 1.4: ESP (jogadores/bosses/frutas/baús), notificador de frutas,
     lista + TP de frutas, Auto Quest (1º/2º/3º mar), Auto Raid (ilha por ilha),
-    Auto Skills Z/X/C, Kill Aura, ataque rápido,
+    Auto Skills Z/X/C, Kill Aura instantâneo, ataque rápido,
     Auto Stats, server hop, auto rejoin, fly, noclip e pulo infinito.
     UI estilo hub genérico: sidebar, tema escuro e acento violeta.
 ]]
@@ -47,6 +47,8 @@ local CONFIG = {
     farmDelay = 0.30,
     fastAttackDelay = 0.03,
     killAuraRange = 30,
+    killAuraDelay = 0.02,
+    killAuraBurst = 3,
     autoRaidDelay = 2,
 
     esp = {
@@ -220,6 +222,15 @@ local State = {
 local UI = { toggles = {}, sliders = {}, lists = {} }
 local antiAfkConn = nil
 local mobCache = { time = 0, name = "", list = {} }
+
+-- Kill aura instantâneo: usa os remotes de hit para acertar todos de uma vez.
+local AURA = {
+    hitId = nil,
+    hooked = false,
+    combo = 0,
+    lastWeapon = 0,
+    lastHitIdWarn = 0,
+}
 
 --==================== BOSSES ====================
 -- Nomes dos bosses (todas as ilhas/mar). Usados para separar boss de mob comum.
@@ -1416,8 +1427,83 @@ local function autoRaidLoop()
 end
 
 --==================== KILL AURA ====================
--- Puxa e ataca todos os inimigos dentro do raio ao redor do personagem.
+-- Puxa e mata todos os inimigos dentro do raio ao redor do personagem.
+-- Usa os remotes RE/RegisterAttack + RE/RegisterHit para aplicar dano em todos
+-- de uma vez (é isso que dá o efeito de "instant kill"), com fallback para arma.
+
+local function getNetRemotes()
+    local ok, attack, hit = pcall(function()
+        local modules = ReplicatedStorage:FindFirstChild("Modules")
+        local net = modules and modules:FindFirstChild("Net")
+        if not net then return nil, nil end
+        return net:FindFirstChild("RE/RegisterAttack"), net:FindFirstChild("RE/RegisterHit")
+    end)
+    if ok then return attack, hit end
+    return nil, nil
+end
+
+-- Captura um hitId válido que o próprio jogo manda ao atacar (anti-cheat novo).
+local function installHitIdCapture()
+    if AURA.hooked then return end
+    local hookFn = hookmetamethod or (getgenv and getgenv().hookmetamethod)
+    local methodFn = getnamecallmethod or (getgenv and getgenv().getnamecallmethod)
+    local callerFn = checkcaller or (getgenv and getgenv().checkcaller)
+    local closureFn = newcclosure or (getgenv and getgenv().newcclosure)
+    if not (hookFn and methodFn and callerFn and closureFn) then return end
+
+    local _, registerHit = getNetRemotes()
+    if not registerHit then return end
+
+    local ok = pcall(function()
+        local old
+        old = hookFn(game, "__namecall", closureFn(function(self, ...)
+            if not callerFn() and methodFn() == "FireServer" and self == registerHit then
+                local args = table.pack(...)
+                if args[4] ~= nil then
+                    AURA.hitId = args[4]
+                elseif args.n == 1 and type(args[1]) == "string" then
+                    AURA.hitId = args[1]
+                end
+            end
+            return old(self, ...)
+        end))
+        AURA.hooked = true
+    end)
+
+    if not ok and setStatus then
+        setStatus("Kill aura: hitId não capturado, usando fallback", true)
+    end
+end
+
+local function killAuraHit(targets)
+    local attack, hit = getNetRemotes()
+    if not attack or not hit or #targets == 0 then return false end
+
+    AURA.combo = (AURA.combo % 4) + 1
+    pcall(function() attack:FireServer(0.4, AURA.combo) end)
+
+    local sent = false
+    for _, t in ipairs(targets) do
+        if t.part then
+            for _ = 1, CONFIG.killAuraBurst do
+                pcall(function()
+                    if AURA.hitId ~= nil then
+                        -- assinatura atual: (part, {}, nil, hitId)
+                        hit:FireServer(t.part, {}, nil, AURA.hitId)
+                    else
+                        -- assinatura antiga: (part, {{model, part}})
+                        hit:FireServer(t.part, { { t.mob, t.part } })
+                    end
+                end)
+            end
+            sent = true
+        end
+    end
+    return sent
+end
+
 local function killAuraLoop()
+    installHitIdCapture()
     while State.killAura do
         local ok = pcall(function()
             if not isAlive() then return end
@@ -1425,7 +1511,7 @@ local function killAuraLoop()
             if not hrp then return end
 
             local radius = CONFIG.killAuraRange
-            local found = false
+            local targets = {}
 
             for _, mob in ipairs(collectEnemies()) do
                 local mhrp = mob:FindFirstChild("HumanoidRootPart")
@@ -1433,7 +1519,10 @@ local function killAuraLoop()
                 if mhrp and mhum and mhum.Health > 0 then
                     local d = (mhrp.Position - hrp.Position).Magnitude
                     if d <= radius then
-                        found = true
+                        targets[#targets + 1] = {
+                            mob = mob,
+                            part = mob:FindFirstChild("Head") or mhrp,
+                        }
                         boostTarget(mob)
                         pcall(function()
                             mhrp.CFrame = hrp.CFrame * CFrame.new(0, 0, -4)
@@ -1444,8 +1533,15 @@ local function killAuraLoop()
                 end
             end
 
-            if found then
-                attackOnce()
+            if #targets > 0 then
+                killAuraHit(targets)
+
+                -- sem hitId capturado, reforça com a arma a cada 0.1s
+                local now = os.clock()
+                if AURA.hitId == nil and now - AURA.lastWeapon >= 0.1 then
+                    AURA.lastWeapon = now
+                    attackOnce()
+                end
             end
         end)
 
@@ -1459,7 +1555,7 @@ local function killAuraLoop()
             clearErrors("aura")
         end
 
-        task.wait(jitter(CONFIG.attackDelay))
+        task.wait(CONFIG.killAuraDelay)
     end
 end
 
@@ -3035,11 +3131,12 @@ makeLabel(combatTab, "Ataque rápido reduz o delay para ~0.03s. Mais DPS, mais d
 
 makeSection(combatTab, "Kill Aura")
 
-UI.toggles.killAura = makeToggle(combatTab, "Kill Aura (mata NPCs perto)", false, function(on)
+UI.toggles.killAura = makeToggle(combatTab, "Kill Aura instantâneo", false, function(on)
     State.killAura = on
     if on then
+        installHitIdCapture()
         task.spawn(killAuraLoop)
-        setStatus("Kill aura ligado (raio " .. CONFIG.killAuraRange .. " studs)")
+        setStatus("Kill aura instantâneo ligado (raio " .. CONFIG.killAuraRange .. " studs)")
     else
         setStatus("Kill aura desligado")
     end
@@ -3049,7 +3146,7 @@ UI.sliders.killAuraRange = makeSlider(combatTab, "Raio do Kill Aura (studs)", 10
     CONFIG.killAuraRange = v
 end)
 
-makeLabel(combatTab, "Kill Aura puxa e ataca os inimigos dentro do raio. Não afeta jogadores.", true)
+makeLabel(combatTab, "Kill Aura instantâneo usa os remotes de hit para matar todos no raio de uma vez. Não afeta jogadores.", true)
 
 makeSection(combatTab, "Auto stats")
 
