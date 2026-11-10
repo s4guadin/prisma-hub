@@ -177,14 +177,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
 | Arquivo | O que é |
 |---|---|
 | `MEMORIA.md` | Este documento. Ler antes de abrir código. |
-| `hub.lua` | Prisma Hub 1.9.2 (arquivo único). |
+| `hub.lua` | Prisma Hub 1.9.3 (arquivo único). |
 | `teste.lua` | Teste mínimo de GUI (quadrado azul "GUI OK"). |
 
 ## 8. Estado atual
 
 - Planejamento: **completo** (este arquivo).
-- Código: **Fase 1.9.2** em `hub.lua`.
-- Versão atual: `1.9.2` (Prisma Hub).
+- Código: **Fase 1.9.3** em `hub.lua`.
+- Versão atual: `1.9.3` (Prisma Hub).
 
 ### Mudanças da 1.4 (pacote "Tudo" inspirado em hubs públicos)
 - **Renomeado para Prisma Hub** (`CONFIG.name`, título da janela, botão de reabrir "P").
@@ -529,4 +529,17 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
     `UI.buyFightingStyle`, `State.autoBuyStyle` e o toggle correspondente).
   - Se nenhum estilo além de `Combat` for encontrado, a lista mostra
     "Nenhum estilo aprendido ainda".
+  - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).
+- **Detecção real de estilo aprendido + reobter Tool (1.9.3)**:
+  - A lista agora cruza quatro fontes para saber o que foi aprendido:
+    Tools de fighting style na mochila/personagem,
+    `PlayerStats.Inventory.FightingStyle`, `PlayerStats.FightingStyle`
+    (mastery) e o `getInventory` do servidor (com cache de 3s).
+  - Estilos não aprendidos continuam fora da lista; `Combat` aparece como padrão.
+  - Ao clicar em um estilo aprendido cuja Tool não está na mochila, o hub chama
+    a mesma ação do NPC (`BuyBlackLeg`, `BuyElectro`, etc.) só para **reobter a
+    Tool**, sem comprar de novo, e já equipa.
+  - Comparação de nomes ignora espaços/maiúsculas (`BlackLeg` = `Black Leg`).
+  - Helpers de estilo foram movidos para a tabela `UI` para não estourar o
+    limite de 200 registradores no `-O0`.
   - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).

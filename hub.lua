@@ -1,5 +1,5 @@
 --[[
-    Prisma Hub - 1.9.2
+    Prisma Hub - 1.9.3
     Arquivo único. PC. Sem key. Anti-detecção básica.
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
@@ -49,7 +49,7 @@ local bootOk, bootErr = pcall(function()
 --==================== CONFIG ====================
 local CONFIG = {
     name = "Prisma Hub",
-    version = "1.9.2",
+    version = "1.9.3",
 
     jitter = 0.30,
     maxErrors = 3,
@@ -4355,7 +4355,7 @@ local combatTab = makeTab("Combat", 4)
 
 -- estilos de luta: no Blox Fruits cada estilo é uma Tool na mochila/personagem
 do
-local FIGHTING_STYLES = {
+UI.fightingStyles = {
     "Combat",
     "Black Leg",
     "Dark Step",
@@ -4374,12 +4374,28 @@ local FIGHTING_STYLES = {
     "Divine Arts",
 }
 
-local function styleKey(s)
-    return string.lower(tostring(s or ""))
+UI.styleKey = function(s)
+    return (string.lower(tostring(s or "")):gsub("%s+", ""))
 end
 
-local function findStyleTool(name)
-    local target = styleKey(name)
+UI.isKnownStyle = function(name)
+    local key = UI.styleKey(name)
+    for _, style in ipairs(UI.fightingStyles) do
+        if UI.styleKey(style) == key then return true end
+    end
+    return false
+end
+
+UI.canonicalStyle = function(name)
+    local key = UI.styleKey(name)
+    for _, style in ipairs(UI.fightingStyles) do
+        if UI.styleKey(style) == key then return style end
+    end
+    return name
+end
+
+UI.findStyleTool = function(name)
+    local target = UI.styleKey(name)
     local char = getChar()
     local backpack = LP:FindFirstChild("Backpack")
     local containers = {}
@@ -4387,7 +4403,7 @@ local function findStyleTool(name)
     if backpack then table.insert(containers, backpack) end
     for _, container in ipairs(containers) do
         for _, tool in ipairs(container:GetChildren()) do
-            if tool:IsA("Tool") and styleKey(tool.Name) == target then
+            if tool:IsA("Tool") and UI.styleKey(tool.Name) == target then
                 return tool
             end
         end
@@ -4395,13 +4411,13 @@ local function findStyleTool(name)
     return nil
 end
 
-local function equippedStyleName()
+UI.equippedStyleName = function()
     local char = getChar()
     if char then
         local tool = char:FindFirstChildOfClass("Tool")
         if tool then
-            for _, style in ipairs(FIGHTING_STYLES) do
-                if styleKey(style) == styleKey(tool.Name) then
+            for _, style in ipairs(UI.fightingStyles) do
+                if UI.styleKey(style) == UI.styleKey(tool.Name) then
                     return tool.Name
                 end
             end
@@ -4414,23 +4430,58 @@ local function equippedStyleName()
     return "Combat"
 end
 
-local function currentStyleText()
-    local name = equippedStyleName()
+UI.currentStyleText = function()
+    local name = UI.equippedStyleName()
     local char = getChar()
     local tool = char and char:FindFirstChildOfClass("Tool")
-    if tool and styleKey(tool.Name) ~= styleKey(name) then
+    if tool and UI.styleKey(tool.Name) ~= UI.styleKey(name) then
         return name .. " (arma: " .. tool.Name .. ")"
     end
     return name
 end
 
-local function refreshFightingStyle()
+UI.refreshFightingStyle = function()
     if UI.fightingStyleLabel then
-        UI.fightingStyleLabel.Text = "Estilo atual: " .. currentStyleText()
+        UI.fightingStyleLabel.Text = "Estilo atual: " .. UI.currentStyleText()
     end
 end
 
-local function equipFightingStyle(name)
+-- ações que o NPC usa para entregar o estilo. Se o estilo já foi aprendido,
+-- chamar de novo só devolve a Tool (não compra de novo).
+UI.styleActions = {
+    ["blackleg"] = { { "BuyBlackLeg", true }, { "BuyBlackLeg" } },
+    ["darkstep"] = { { "BuyDarkStep", true }, { "BuyDarkStep" } },
+    ["waterkungfu"] = { { "BuyWaterKungFu", true }, { "BuyWaterKungFu" } },
+    ["electro"] = { { "BuyElectro", true }, { "BuyElectro" } },
+    ["fishmankarate"] = { { "BuyFishmanKarate", true }, { "BuyFishmanKarate" } },
+    ["dragonclaw"] = {
+        { "BlackbeardReward", "DragonClaw", "1" },
+        { "BlackbeardReward", "DragonClaw", "2" },
+    },
+    ["superhuman"] = { { "BuySuperhuman", true }, { "BuySuperhuman" } },
+    ["deathstep"] = { { "BuyDeathStep", true }, { "BuyDeathStep" } },
+    ["sharkmankarate"] = { { "BuySharkmanKarate", true }, { "BuySharkmanKarate" } },
+    ["electricclaw"] = { { "BuyElectricClaw", true }, { "BuyElectricClaw" } },
+    ["dragontalon"] = { { "BuyDragonTalon", true }, { "BuyDragonTalon" } },
+    ["godhuman"] = { { "BuyGodhuman", true }, { "BuyGodhuman" } },
+    ["sanguineart"] = { { "BuySanguineArt", true }, { "BuySanguineArt" } },
+}
+
+UI.grantStyleTool = function(name)
+    local actions = UI.styleActions[UI.styleKey(name)]
+    if not actions then return false end
+    for _, args in ipairs(actions) do
+        fireRemote("CommF_", table.unpack(args))
+        task.wait(0.2)
+    end
+    for _ = 1, 6 do
+        task.wait(0.3)
+        if UI.findStyleTool(name) then return true end
+    end
+    return false
+end
+
+UI.equipFightingStyle = function(name)
     local char = getChar()
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if not hum then
@@ -4439,18 +4490,29 @@ local function equipFightingStyle(name)
     end
 
     -- "Combat" é o estilo padrão; normalmente não existe como Tool
-    if styleKey(name) == "combat" and not findStyleTool(name) then
+    if UI.styleKey(name) == "combat" and not UI.findStyleTool(name) then
         pcall(function() hum:UnequipTools() end)
         State.lastToolName = nil
         State.fightingStyle = "Combat"
-        refreshFightingStyle()
+        UI.refreshFightingStyle()
         setStatus("Estilo padrão (Combat) selecionado")
         return
     end
 
-    local tool = findStyleTool(name)
+    local tool = UI.findStyleTool(name)
     if not tool then
-        setStatus("Estilo " .. tostring(name) .. " não está na mochila", true)
+        -- estilo já aprendido, mas a Tool não está na mochila: pede de novo ao
+        -- servidor, igual a clicar no NPC para pegar o estilo outra vez
+        setStatus("Pegando " .. tostring(name) .. " novamente...")
+        if not UI.grantStyleTool(name) then
+            setStatus("Não consegui pegar " .. tostring(name) .. " (não aprendido?)", true)
+            return
+        end
+        tool = UI.findStyleTool(name)
+    end
+
+    if not tool then
+        setStatus("Estilo " .. tostring(name) .. " não está disponível", true)
         return
     end
 
@@ -4458,7 +4520,7 @@ local function equipFightingStyle(name)
     if equipped and equipped.Name == tool.Name then
         State.fightingStyle = tool.Name
         State.lastToolName = tool.Name
-        refreshFightingStyle()
+        UI.refreshFightingStyle()
         setStatus("Estilo já equipado: " .. tool.Name)
         return
     end
@@ -4476,22 +4538,53 @@ local function equipFightingStyle(name)
     if now and now.Name == tool.Name then
         State.fightingStyle = tool.Name
         State.lastToolName = tool.Name
-        refreshFightingStyle()
+        UI.refreshFightingStyle()
         setStatus("Estilo equipado: " .. tool.Name)
     else
         setStatus("Não foi possível equipar " .. tool.Name, true)
     end
 end
 
-local function styleList()
+-- cache do inventário do servidor para não invocar o remote a cada clique
+UI.styleInvCache = { at = 0, names = {} }
+
+UI.inventoryStyleNames = function()
+    local now = os.clock()
+    if now - UI.styleInvCache.at < 3 then return UI.styleInvCache.names end
+    UI.styleInvCache.at = now
+
+    local found = {}
+    local remote = getRemote("CommF_")
+    if remote then
+        local ok, data = pcall(function() return remote:InvokeServer("getInventory") end)
+        if ok and type(data) == "table" then
+            for _, v in pairs(data) do
+                if type(v) == "table" and type(v.Name) == "string" and UI.isKnownStyle(v.Name) then
+                    found[UI.styleKey(v.Name)] = true
+                end
+            end
+        end
+    end
+    UI.styleInvCache.names = found
+    return found
+end
+
+UI.styleList = function()
     local names = {}
     local seen = {}
 
-    -- Combat é o estilo padrão, sempre disponível (não vira Tool)
-    table.insert(names, "Combat")
-    seen["combat"] = true
+    local function addName(name)
+        if type(name) ~= "string" or name == "" then return end
+        local key = UI.styleKey(name)
+        if seen[key] then return end
+        seen[key] = true
+        table.insert(names, UI.canonicalStyle(name))
+    end
 
-    -- mostra apenas os estilos que o jogador realmente tem (mochila/personagem)
+    -- Combat é o estilo padrão, sempre disponível (não vira Tool)
+    addName("Combat")
+
+    -- 1) Tools de fighting style na mochila/personagem
     local char = getChar()
     local backpack = LP:FindFirstChild("Backpack")
     local containers = {}
@@ -4501,30 +4594,40 @@ local function styleList()
         for _, tool in ipairs(container:GetChildren()) do
             if tool:IsA("Tool") then
                 local tip = tostring(tool.ToolTip)
-                local key = styleKey(tool.Name)
-                local known = false
-                for _, style in ipairs(FIGHTING_STYLES) do
-                    if styleKey(style) == key then
-                        known = true
-                        break
-                    end
-                end
-                if (known or tip == "Fighting Style" or tip == "Melee") and not seen[key] then
-                    seen[key] = true
-                    table.insert(names, tool.Name)
+                if tip == "Fighting Style" or tip == "Melee" or UI.isKnownStyle(tool.Name) then
+                    addName(tool.Name)
                 end
             end
         end
     end
+
+    -- 2) PlayerStats.Inventory.FightingStyle (estilos aprendidos)
+    local stats = LP:FindFirstChild("PlayerStats")
+    local inv = stats and stats:FindFirstChild("Inventory")
+    local invStyles = inv and inv:FindFirstChild("FightingStyle")
+    if invStyles then
+        for _, v in ipairs(invStyles:GetChildren()) do
+            addName(v.Name)
+        end
+    end
+
+    -- 3) PlayerStats.FightingStyle (pasta de mastery)
+    local mastery = stats and stats:FindFirstChild("FightingStyle")
+    if mastery then
+        for _, v in ipairs(mastery:GetChildren()) do
+            addName(v.Name)
+        end
+    end
+
+    -- 4) inventário do servidor (getInventory)
+    for key in pairs(UI.inventoryStyleNames()) do
+        addName(key)
+    end
+
     return names
 end
-
-UI.equipFightingStyle = equipFightingStyle
-UI.refreshFightingStyle = refreshFightingStyle
-UI.styleList = styleList
-UI.equippedStyleName = equippedStyleName
-UI.currentStyleText = currentStyleText
 end
+
 
 makeLabel(combatTab, "Troque o estilo de luta abaixo. Skills usam o RemoteFunction da arma equipada (Z/X/C).", true)
 
@@ -4544,7 +4647,7 @@ UI.rebuildFightingStyles = function()
         addListButton(frame, "Nenhum estilo aprendido ainda", function() end, C.panel)
     end
     for _, name in ipairs(names) do
-        local active = string.lower(name) == string.lower(current)
+        local active = UI.styleKey(name) == UI.styleKey(current)
         addListButton(frame, name, function()
             UI.equipFightingStyle(name)
             UI.rebuildFightingStyles()
@@ -4559,7 +4662,7 @@ makeButton(combatTab, "Atualizar lista de estilos", function()
     setStatus("Lista de estilos atualizada")
 end)
 
-makeLabel(combatTab, "Mostrando apenas os estilos que você já aprendeu. 'Combat' é o estilo padrão.", true)
+makeLabel(combatTab, "Mostrando só os estilos que você já aprendeu. Ao clicar, o hub pega a Tool de novo (como no NPC) e equipa. 'Combat' é o padrão.", true)
 
 makeSection(combatTab, "Skills")
 
