@@ -177,14 +177,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
 | Arquivo | O que é |
 |---|---|
 | `MEMORIA.md` | Este documento. Ler antes de abrir código. |
-| `hub.lua` | Prisma Hub 1.9.0 (arquivo único). |
+| `hub.lua` | Prisma Hub 1.9.1 (arquivo único). |
 | `teste.lua` | Teste mínimo de GUI (quadrado azul "GUI OK"). |
 
 ## 8. Estado atual
 
 - Planejamento: **completo** (este arquivo).
-- Código: **Fase 1.9.0** em `hub.lua`.
-- Versão atual: `1.9.0` (Prisma Hub).
+- Código: **Fase 1.9.1** em `hub.lua`.
+- Versão atual: `1.9.1` (Prisma Hub).
 
 ### Mudanças da 1.4 (pacote "Tudo" inspirado em hubs públicos)
 - **Renomeado para Prisma Hub** (`CONFIG.name`, título da janela, botão de reabrir "P").
@@ -505,3 +505,18 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   - Helpers de estilo ficam em bloco `do ... end` próprio e são expostos em `UI`,
     sem aumentar os registradores do boot. Validado com `luau-compile -O0`,
     `-O1` e `-O2` (todos exit=0) e com `luaparse`.
+- **Compra de estilo de luta sem NPC (1.9.1)**:
+  - A lista de estilos agora marca com `(comprar)` os estilos que ainda não estão
+    na mochila. Ao clicar em um deles, o hub chama o remote de compra do servidor
+    via `CommF_` (ex.: `BuyBlackLeg`, `BuyElectro`, `BuyFishmanKarate`,
+    `BuySuperhuman`, `BuyDeathStep`, `BuySharkmanKarate`, `BuyElectricClaw`,
+    `BuyDragonTalon`, `BuyGodhuman`, `BuySanguineArt`, além de
+    `BlackbeardReward DragonClaw 1/2`).
+  - O hub dispara a ação, espera a Tool aparecer no Backpack (até ~2s) e já
+    equipa o estilo automaticamente.
+  - Novo toggle **"Comprar estilo automaticamente se não tiver"** (ligado por
+    padrão), salvo em `prisma_config.json` junto com `autoBuyStyle`.
+  - Continua dependendo dos requisitos do servidor: nível, Beli/fragmentos e
+    pré-requisitos de cada estilo. Se o servidor recusar, o hub avisa na barra de
+    status em vez de fingir que equipou.
+  - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).

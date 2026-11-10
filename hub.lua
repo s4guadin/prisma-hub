@@ -1,5 +1,5 @@
 --[[
-    Prisma Hub - 1.9.0
+    Prisma Hub - 1.9.1
     Arquivo único. PC. Sem key. Anti-detecção básica.
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
@@ -49,7 +49,7 @@ local bootOk, bootErr = pcall(function()
 --==================== CONFIG ====================
 local CONFIG = {
     name = "Prisma Hub",
-    version = "1.9.0",
+    version = "1.9.1",
 
     jitter = 0.30,
     maxErrors = 3,
@@ -224,6 +224,8 @@ local State = {
     skillRunning = false,
     fastAttack = false,
     fastAttackOwnsAttack = false,
+    autoBuyStyle = true,
+    fightingStyle = nil,
 
     -- progressão
     autoQuest = false,
@@ -2948,6 +2950,7 @@ local function saveConfig()
         flySpeed = CONFIG.flySpeed,
         statTarget = State.statTarget,
         fruitStoreCapacity = State.fruitStoreCapacity,
+        autoBuyStyle = State.autoBuyStyle,
     }
 
     if not writefile then
@@ -3004,6 +3007,9 @@ local function loadConfig()
     end
     if tonumber(data.fruitStoreCapacity) and UI.sliders.fruitStoreCapacity then
         UI.sliders.fruitStoreCapacity.set(tonumber(data.fruitStoreCapacity))
+    end
+    if type(data.autoBuyStyle) == "boolean" and UI.toggles.autoBuyStyle then
+        UI.toggles.autoBuyStyle.set(data.autoBuyStyle)
     end
 
     notify("Config carregada")
@@ -4429,7 +4435,7 @@ local function refreshFightingStyle()
     end
 end
 
-local function equipFightingStyle(name)
+local function equipFightingStyle(name, fromBuy)
     local char = getChar()
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if not hum then
@@ -4449,6 +4455,10 @@ local function equipFightingStyle(name)
 
     local tool = findStyleTool(name)
     if not tool then
+        if not fromBuy and State.autoBuyStyle and UI.buyFightingStyle then
+            UI.buyFightingStyle(name)
+            return
+        end
         setStatus("Estilo " .. tostring(name) .. " não está na mochila (não desbloqueado?)", true)
         return
     end
@@ -4516,6 +4526,52 @@ UI.refreshFightingStyle = refreshFightingStyle
 UI.styleList = styleList
 UI.equippedStyleName = equippedStyleName
 UI.currentStyleText = currentStyleText
+UI.findStyleTool = findStyleTool
+
+-- ações de compra/desbloqueio de cada estilo via CommF_
+UI.styleBuy = {
+    ["black leg"] = { { "BuyBlackLeg", true }, { "BuyBlackLeg" } },
+    ["dark step"] = { { "BuyDarkStep", true }, { "BuyDarkStep" } },
+    ["water kung fu"] = { { "BuyWaterKungFu", true }, { "BuyWaterKungFu" } },
+    ["electro"] = { { "BuyElectro", true }, { "BuyElectro" } },
+    ["fishman karate"] = { { "BuyFishmanKarate", true }, { "BuyFishmanKarate" } },
+    ["dragon claw"] = {
+        { "BlackbeardReward", "DragonClaw", "1" },
+        { "BlackbeardReward", "DragonClaw", "2" },
+    },
+    ["superhuman"] = { { "BuySuperhuman", true }, { "BuySuperhuman" } },
+    ["death step"] = { { "BuyDeathStep", true }, { "BuyDeathStep" } },
+    ["sharkman karate"] = { { "BuySharkmanKarate", true }, { "BuySharkmanKarate" } },
+    ["electric claw"] = { { "BuyElectricClaw", true }, { "BuyElectricClaw" } },
+    ["dragon talon"] = { { "BuyDragonTalon", true }, { "BuyDragonTalon" } },
+    ["godhuman"] = { { "BuyGodhuman", true }, { "BuyGodhuman" } },
+    ["sanguine art"] = { { "BuySanguineArt", true }, { "BuySanguineArt" } },
+}
+
+UI.buyFightingStyle = function(name)
+    local actions = UI.styleBuy[styleKey(name)]
+    if not actions then
+        setStatus("Sem compra automática para " .. tostring(name) .. ". Desbloqueie no NPC.", true)
+        return
+    end
+
+    setStatus("Comprando/desbloqueando " .. tostring(name) .. "...")
+    for _, args in ipairs(actions) do
+        fireRemote("CommF_", table.unpack(args))
+        task.wait(0.25)
+    end
+
+    -- o servidor pode demorar para entregar a Tool; confere por até ~2s
+    for _ = 1, 6 do
+        task.wait(0.35)
+        if findStyleTool(name) then
+            equipFightingStyle(name, true)
+            return
+        end
+    end
+
+    setStatus("Servidor não liberou " .. tostring(name) .. ". Confira nível, Beli/fragmentos e requisitos.", true)
+end
 end
 
 makeLabel(combatTab, "Troque o estilo de luta abaixo. Skills usam o RemoteFunction da arma equipada (Z/X/C).", true)
@@ -4533,7 +4589,12 @@ UI.rebuildFightingStyles = function()
     local current = UI.equippedStyleName()
     for _, name in ipairs(UI.styleList()) do
         local active = string.lower(name) == string.lower(current)
-        addListButton(frame, name, function()
+        local owned = UI.findStyleTool(name) ~= nil
+        local label = name
+        if not owned and string.lower(name) ~= "combat" then
+            label = name .. "  (comprar)"
+        end
+        addListButton(frame, label, function()
             UI.equipFightingStyle(name)
             UI.rebuildFightingStyles()
         end, active and C.accent or C.panel2)
@@ -4541,13 +4602,18 @@ UI.rebuildFightingStyles = function()
 end
 UI.rebuildFightingStyles()
 
+UI.toggles.autoBuyStyle = makeToggle(combatTab, "Comprar estilo automaticamente se não tiver", true, function(on)
+    State.autoBuyStyle = on
+    setStatus(on and "Compra automática de estilo ligada" or "Compra automática de estilo desligada")
+end)
+
 makeButton(combatTab, "Atualizar lista de estilos", function()
     UI.rebuildFightingStyles()
     UI.refreshFightingStyle()
     setStatus("Lista de estilos atualizada")
 end)
 
-makeLabel(combatTab, "Cada estilo é uma Tool na mochila. Se não aparecer, desbloqueie no NPC. 'Combat' volta ao estilo padrão.", true)
+makeLabel(combatTab, "Estilos marcados '(comprar)' não estão na mochila: o hub chama o remote de compra do servidor. Gasta Beli/fragmentos e exige nível/requisitos.", true)
 
 makeSection(combatTab, "Skills")
 
