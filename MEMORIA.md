@@ -177,14 +177,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
 | Arquivo | O que é |
 |---|---|
 | `MEMORIA.md` | Este documento. Ler antes de abrir código. |
-| `hub.lua` | Prisma Hub 1.8.4 (arquivo único). |
+| `hub.lua` | Prisma Hub 1.9.0 (arquivo único). |
 | `teste.lua` | Teste mínimo de GUI (quadrado azul "GUI OK"). |
 
 ## 8. Estado atual
 
 - Planejamento: **completo** (este arquivo).
-- Código: **Fase 1.8.4** em `hub.lua`.
-- Versão atual: `1.8.4` (Prisma Hub).
+- Código: **Fase 1.9.0** em `hub.lua`.
+- Versão atual: `1.9.0` (Prisma Hub).
 
 ### Mudanças da 1.4 (pacote "Tudo" inspirado em hubs públicos)
 - **Renomeado para Prisma Hub** (`CONFIG.name`, título da janela, botão de reabrir "P").
@@ -487,3 +487,21 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   Combat, ESP, Util) agora fica no seu próprio bloco `do ... end`, liberando os
   registradores antes da aba seguinte. Validado com `luau-compile -O0`, `-O1` e
   `-O2` (todos exit=0) e com `luaparse`. Sintaxe validada.
+- **UI renovada + troca de estilo de luta (1.9.0)**:
+  - Paleta refinada (fundos mais escuros, painéis e strokes em camadas), sombra
+    atrás da janela, linha de acento com gradiente, título com logo em gradiente
+    e selo de versão.
+  - Sidebar com indicador de aba ativa, hover animado, botão de pânico e botão
+    "P" com gradiente e feedback de hover.
+  - Widgets padronizados: toggles animados, sliders com valor em pill e trilha
+    em gradiente, botões com hover/press suave, seções com barra de acento e
+    divisória, listas com padding e hover.
+  - Cada aba ganhou cabeçalho próprio com título e divisória.
+  - Aba **Combat** ganhou a seção **Estilo de luta**: lista os estilos conhecidos
+    + estilos descobertos na mochila, destaca o estilo equipado e troca via
+    `Humanoid:EquipTool` (as fighting styles do Blox Fruits são Tools).
+    "Combat" volta ao estilo padrão com `UnequipTools`. O estilo escolhido também
+    passa a ser lembrado em `State.lastToolName` para o Auto Ataque/Farm.
+  - Helpers de estilo ficam em bloco `do ... end` próprio e são expostos em `UI`,
+    sem aumentar os registradores do boot. Validado com `luau-compile -O0`,
+    `-O1` e `-O2` (todos exit=0) e com `luaparse`.

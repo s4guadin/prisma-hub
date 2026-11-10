@@ -1,5 +1,5 @@
 --[[
-    Prisma Hub — 1.8.4
+    Prisma Hub - 1.9.0
     Arquivo único. PC. Sem key. Anti-detecção básica.
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
@@ -49,7 +49,7 @@ local bootOk, bootErr = pcall(function()
 --==================== CONFIG ====================
 local CONFIG = {
     name = "Prisma Hub",
-    version = "1.8.4",
+    version = "1.9.0",
 
     jitter = 0.30,
     maxErrors = 3,
@@ -3011,19 +3011,23 @@ end
 
 --==================== UI ====================
 local C = {
-    bg = Color3.fromRGB(14, 14, 19),
-    sidebar = Color3.fromRGB(10, 10, 14),
-    panel = Color3.fromRGB(22, 22, 30),
-    panel2 = Color3.fromRGB(30, 30, 40),
-    hover = Color3.fromRGB(40, 40, 54),
+    bg = Color3.fromRGB(13, 13, 18),
+    bg2 = Color3.fromRGB(17, 17, 24),
+    sidebar = Color3.fromRGB(10, 10, 15),
+    panel = Color3.fromRGB(23, 23, 32),
+    panel2 = Color3.fromRGB(31, 31, 43),
+    hover = Color3.fromRGB(42, 42, 58),
     accent = Color3.fromRGB(124, 92, 255),
     accent2 = Color3.fromRGB(167, 139, 250),
-    text = Color3.fromRGB(238, 238, 245),
-    sub = Color3.fromRGB(150, 150, 165),
-    off = Color3.fromRGB(45, 45, 58),
-    danger = Color3.fromRGB(235, 80, 95),
-    ok = Color3.fromRGB(80, 210, 130),
-    stroke = Color3.fromRGB(38, 38, 50),
+    accentDark = Color3.fromRGB(88, 60, 200),
+    text = Color3.fromRGB(240, 240, 248),
+    sub = Color3.fromRGB(150, 150, 168),
+    sub2 = Color3.fromRGB(108, 108, 128),
+    off = Color3.fromRGB(48, 48, 64),
+    danger = Color3.fromRGB(240, 82, 98),
+    ok = Color3.fromRGB(80, 214, 134),
+    stroke = Color3.fromRGB(44, 44, 60),
+    strokeSoft = Color3.fromRGB(32, 32, 44),
 }
 
 local function new(class, props, parent)
@@ -3072,18 +3076,37 @@ local main = new("Frame", {
     BackgroundColor3 = C.bg,
     BorderSizePixel = 0,
     Visible = true,
+    ZIndex = 2,
 }, gui)
-new("UICorner", { CornerRadius = UDim.new(0, 12) }, main)
+new("UICorner", { CornerRadius = UDim.new(0, 14) }, main)
 new("UIStroke", { Color = C.stroke, Thickness = 1 }, main)
 
--- linha de acento no topo
-new("Frame", {
-    Size = UDim2.new(1, -24, 0, 2),
-    Position = UDim2.new(0, 12, 0, 0),
+-- sombra suave atrás da janela (dá profundidade)
+local shadow = new("Frame", {
+    Name = "Shadow",
+    Size = UDim2.new(0, 620, 0, 470),
+    Position = UDim2.new(0.5, -310, 0.5, -231),
+    BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+    BackgroundTransparency = 0.55,
+    BorderSizePixel = 0,
+    ZIndex = 1,
+}, gui)
+new("UICorner", { CornerRadius = UDim.new(0, 16) }, shadow)
+
+-- linha de acento no topo, com gradiente
+new("UIGradient", {
+    Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, C.accent),
+        ColorSequenceKeypoint.new(0.5, C.accent2),
+        ColorSequenceKeypoint.new(1, C.accent),
+    }),
+}, new("Frame", {
+    Size = UDim2.new(1, -28, 0, 3),
+    Position = UDim2.new(0, 14, 0, 0),
     BackgroundColor3 = C.accent,
     BorderSizePixel = 0,
-    ZIndex = 2,
-}, main)
+    ZIndex = 3,
+}, main))
 
 local titleBar = new("TextButton", {
     Name = "TitleBar",
@@ -3092,74 +3115,71 @@ local titleBar = new("TextButton", {
     Text = "",
     AutoButtonColor = false,
     BorderSizePixel = 0,
+    ZIndex = 2,
 }, main)
-new("UICorner", { CornerRadius = UDim.new(0, 12) }, titleBar)
+new("UICorner", { CornerRadius = UDim.new(0, 14) }, titleBar)
+new("UIGradient", {
+    Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, C.sidebar),
+        ColorSequenceKeypoint.new(1, C.bg2),
+    }),
+}, titleBar)
+new("Frame", {
+    Size = UDim2.new(1, 0, 0, 1),
+    Position = UDim2.new(0, 0, 1, -1),
+    BackgroundColor3 = C.strokeSoft,
+    BorderSizePixel = 0,
+    ZIndex = 2,
+}, titleBar)
 
 local logo = new("TextLabel", {
-    Size = UDim2.new(0, 24, 0, 24),
-    Position = UDim2.new(0, 14, 0.5, -12),
+    Size = UDim2.new(0, 26, 0, 26),
+    Position = UDim2.new(0, 14, 0.5, -13),
     BackgroundColor3 = C.accent,
     Text = "P",
     TextColor3 = Color3.fromRGB(255, 255, 255),
-    TextSize = 14,
+    TextSize = 15,
     Font = Enum.Font.GothamBold,
     BorderSizePixel = 0,
+    ZIndex = 3,
 }, titleBar)
-new("UICorner", { CornerRadius = UDim.new(0, 7) }, logo)
+new("UICorner", { CornerRadius = UDim.new(0, 8) }, logo)
+new("UIStroke", { Color = Color3.fromRGB(255, 255, 255), Transparency = 0.75, Thickness = 1 }, logo)
+new("UIGradient", {
+    Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, C.accent2),
+        ColorSequenceKeypoint.new(1, C.accentDark),
+    }),
+    Rotation = 90,
+}, logo)
 
 new("TextLabel", {
     Size = UDim2.new(0, 260, 1, 0),
-    Position = UDim2.new(0, 48, 0, 0),
+    Position = UDim2.new(0, 50, 0, 0),
     BackgroundTransparency = 1,
     RichText = true,
-    Text = '<font color="rgb(167,139,250)"><b>PRISMA</b></font> HUB',
-    TextColor3 = C.text,
-    TextSize = 15,
-    Font = Enum.Font.GothamBold,
-    TextXAlignment = Enum.TextXAlignment.Left,
-}, titleBar)
-
-new("TextLabel", {
-    Size = UDim2.new(0, 60, 1, 0),
-    Position = UDim2.new(0, 206, 0, 0),
-    BackgroundTransparency = 1,
-    Text = "v" .. CONFIG.version,
-    TextColor3 = C.sub,
-    TextSize = 11,
-    Font = Enum.Font.Gotham,
-    TextXAlignment = Enum.TextXAlignment.Left,
-}, titleBar)
-
-local minBtn = new("TextButton", {
-    Size = UDim2.new(0, 26, 0, 26),
-    Position = UDim2.new(1, -68, 0.5, -13),
-    BackgroundColor3 = C.panel2,
-    Text = "–",
-    TextColor3 = C.text,
-    TextSize = 15,
-    Font = Enum.Font.GothamBold,
-    BorderSizePixel = 0,
-    AutoButtonColor = false,
-}, titleBar)
-new("UICorner", { CornerRadius = UDim.new(0, 7) }, minBtn)
-
-local closeBtn = new("TextButton", {
-    Size = UDim2.new(0, 26, 0, 26),
-    Position = UDim2.new(1, -36, 0.5, -13),
-    BackgroundColor3 = C.panel2,
-    Text = "×",
+    Text = '<font color="rgb(167,139,250)"><b>PRISMA</b></font> <font color="rgb(150,150,168)">HUB</font>',
     TextColor3 = C.text,
     TextSize = 16,
     Font = Enum.Font.GothamBold,
-    BorderSizePixel = 0,
-    AutoButtonColor = false,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 3,
 }, titleBar)
-new("UICorner", { CornerRadius = UDim.new(0, 7) }, closeBtn)
 
-minBtn.MouseEnter:Connect(function() minBtn.BackgroundColor3 = C.hover end)
-minBtn.MouseLeave:Connect(function() minBtn.BackgroundColor3 = C.panel2 end)
-closeBtn.MouseEnter:Connect(function() closeBtn.BackgroundColor3 = C.danger end)
-closeBtn.MouseLeave:Connect(function() closeBtn.BackgroundColor3 = C.panel2 end)
+-- selo de versão
+new("UICorner", { CornerRadius = UDim.new(0, 6) }, new("TextLabel", {
+    Size = UDim2.new(0, 56, 0, 20),
+    Position = UDim2.new(1, -140, 0.5, -10),
+    BackgroundColor3 = C.panel,
+    Text = "v" .. CONFIG.version,
+    TextColor3 = C.sub,
+    TextSize = 10,
+    Font = Enum.Font.GothamBold,
+    BorderSizePixel = 0,
+    ZIndex = 3,
+}, titleBar))
+
+C.tween = TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
 -- arrastar janela
 local dragging = false
@@ -3183,6 +3203,12 @@ UserInputService.InputChanged:Connect(function(input)
             startPos.Y.Scale,
             startPos.Y.Offset + delta.Y
         )
+        shadow.Position = UDim2.new(
+            main.Position.X.Scale,
+            main.Position.X.Offset,
+            main.Position.Y.Scale,
+            main.Position.Y.Offset + 4
+        )
     end
 end)
 
@@ -3198,33 +3224,52 @@ local sidebar = new("Frame", {
     Position = UDim2.new(0, 0, 0, 44),
     BackgroundColor3 = C.sidebar,
     BorderSizePixel = 0,
+    ZIndex = 2,
 }, main)
+new("UIGradient", {
+    Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, C.sidebar),
+        ColorSequenceKeypoint.new(1, C.bg),
+    }),
+    Rotation = 90,
+}, sidebar)
 new("Frame", {
     Size = UDim2.new(0, 1, 1, 0),
     Position = UDim2.new(1, -1, 0, 0),
-    BackgroundColor3 = C.stroke,
+    BackgroundColor3 = C.strokeSoft,
     BorderSizePixel = 0,
+    ZIndex = 2,
 }, sidebar)
+
+new("UICorner", { CornerRadius = UDim.new(1, 0) }, new("Frame", {
+    Size = UDim2.new(0, 3, 0, 3),
+    Position = UDim2.new(0, 14, 0, 17),
+    BackgroundColor3 = C.accent,
+    BorderSizePixel = 0,
+    ZIndex = 3,
+}, sidebar))
 
 new("TextLabel", {
     Size = UDim2.new(1, -24, 0, 16),
-    Position = UDim2.new(0, 14, 0, 12),
+    Position = UDim2.new(0, 22, 0, 12),
     BackgroundTransparency = 1,
-    Text = "NAVEGACAO",
-    TextColor3 = C.sub,
+    Text = "MENU",
+    TextColor3 = C.sub2,
     TextSize = 10,
     Font = Enum.Font.GothamBold,
     TextXAlignment = Enum.TextXAlignment.Left,
+    ZIndex = 3,
 }, sidebar)
 
 local tabBar = new("Frame", {
     Size = UDim2.new(1, -20, 1, -96),
-    Position = UDim2.new(0, 10, 0, 36),
+    Position = UDim2.new(0, 10, 0, 38),
     BackgroundTransparency = 1,
+    ZIndex = 3,
 }, sidebar)
 new("UIListLayout", {
     FillDirection = Enum.FillDirection.Vertical,
-    Padding = UDim.new(0, 4),
+    Padding = UDim.new(0, 3),
     SortOrder = Enum.SortOrder.LayoutOrder,
 }, tabBar)
 
@@ -3233,12 +3278,33 @@ local content = new("Frame", {
     Size = UDim2.new(1, -170, 1, -84),
     Position = UDim2.new(0, 158, 0, 52),
     BackgroundTransparency = 1,
+    ZIndex = 2,
 }, main)
 
--- status
+-- barra de status (rodapé do conteúdo)
+local statusBar = new("Frame", {
+    Size = UDim2.new(1, -170, 0, 22),
+    Position = UDim2.new(0, 158, 1, -30),
+    BackgroundColor3 = C.panel,
+    BackgroundTransparency = 0.35,
+    BorderSizePixel = 0,
+    ZIndex = 2,
+}, main)
+new("UICorner", { CornerRadius = UDim.new(0, 7) }, statusBar)
+new("UIStroke", { Color = C.strokeSoft, Thickness = 1 }, statusBar)
+
+UI.statusDot = new("Frame", {
+    Size = UDim2.new(0, 6, 0, 6),
+    Position = UDim2.new(0, 10, 0.5, -3),
+    BackgroundColor3 = C.ok,
+    BorderSizePixel = 0,
+    ZIndex = 3,
+}, statusBar)
+new("UICorner", { CornerRadius = UDim.new(1, 0) }, UI.statusDot)
+
 local status = new("TextLabel", {
-    Size = UDim2.new(1, -170, 0, 18),
-    Position = UDim2.new(0, 158, 1, -26),
+    Size = UDim2.new(1, -34, 1, 0),
+    Position = UDim2.new(0, 22, 0, 0),
     BackgroundTransparency = 1,
     Text = "Pronto",
     TextColor3 = C.sub,
@@ -3246,11 +3312,15 @@ local status = new("TextLabel", {
     Font = Enum.Font.Gotham,
     TextXAlignment = Enum.TextXAlignment.Left,
     TextTruncate = Enum.TextTruncate.AtEnd,
-}, main)
+    ZIndex = 3,
+}, statusBar)
 
 setStatus = function(text, isError)
     status.Text = tostring(text)
     status.TextColor3 = isError and C.danger or C.sub
+    if UI.statusDot then
+        UI.statusDot.BackgroundColor3 = isError and C.danger or C.ok
+    end
 end
 
 -- botão de pânico (rodapé da sidebar)
@@ -3264,10 +3334,16 @@ local panic = new("TextButton", {
     Font = Enum.Font.GothamBold,
     BorderSizePixel = 0,
     AutoButtonColor = false,
+    ZIndex = 3,
 }, sidebar)
-new("UICorner", { CornerRadius = UDim.new(0, 8) }, panic)
-panic.MouseEnter:Connect(function() panic.BackgroundColor3 = Color3.fromRGB(255, 105, 120) end)
-panic.MouseLeave:Connect(function() panic.BackgroundColor3 = C.danger end)
+new("UICorner", { CornerRadius = UDim.new(0, 9) }, panic)
+new("UIStroke", { Color = Color3.fromRGB(255, 140, 150), Transparency = 0.65, Thickness = 1 }, panic)
+panic.MouseEnter:Connect(function()
+    TweenService:Create(panic, C.tween, { BackgroundColor3 = Color3.fromRGB(255, 118, 132) }):Play()
+end)
+panic.MouseLeave:Connect(function()
+    TweenService:Create(panic, C.tween, { BackgroundColor3 = C.danger }):Play()
+end)
 panic.MouseButton1Click:Connect(function()
     safeCall(killSwitch)
 end)
@@ -3286,19 +3362,88 @@ local reopen = new("TextButton", {
     Visible = false,
     ZIndex = 50,
 }, gui)
-new("UICorner", { CornerRadius = UDim.new(0, 12) }, reopen)
+new("UICorner", { CornerRadius = UDim.new(0, 13) }, reopen)
 new("UIStroke", { Color = C.stroke, Thickness = 1 }, reopen)
+new("UIGradient", {
+    Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, C.accent2),
+        ColorSequenceKeypoint.new(1, C.accentDark),
+    }),
+    Rotation = 90,
+}, reopen)
+reopen.MouseEnter:Connect(function()
+    TweenService:Create(reopen, C.tween, { Size = UDim2.new(0, 50, 0, 50), Position = UDim2.new(1, -60, 0, 10) }):Play()
+end)
+reopen.MouseLeave:Connect(function()
+    TweenService:Create(reopen, C.tween, { Size = UDim2.new(0, 46, 0, 46), Position = UDim2.new(1, -58, 0, 12) }):Play()
+end)
 
-minBtn.MouseButton1Click:Connect(function()
-    main.Visible = false
-    reopen.Visible = true
-end)
-closeBtn.MouseButton1Click:Connect(function()
-    main.Visible = false
-    reopen.Visible = true
-end)
+-- botões da janela (escopo próprio para não gastar registradores do boot)
+do
+    local minBtn = new("TextButton", {
+        Size = UDim2.new(0, 26, 0, 26),
+        Position = UDim2.new(1, -68, 0.5, -13),
+        BackgroundColor3 = C.panel2,
+        Text = "–",
+        TextColor3 = C.text,
+        TextSize = 15,
+        Font = Enum.Font.GothamBold,
+        BorderSizePixel = 0,
+        AutoButtonColor = false,
+        ZIndex = 3,
+    }, titleBar)
+    new("UICorner", { CornerRadius = UDim.new(0, 8) }, minBtn)
+    local minStroke = new("UIStroke", { Color = C.strokeSoft, Thickness = 1 }, minBtn)
+
+    local closeBtn = new("TextButton", {
+        Size = UDim2.new(0, 26, 0, 26),
+        Position = UDim2.new(1, -36, 0.5, -13),
+        BackgroundColor3 = C.panel2,
+        Text = "×",
+        TextColor3 = C.text,
+        TextSize = 17,
+        Font = Enum.Font.GothamBold,
+        BorderSizePixel = 0,
+        AutoButtonColor = false,
+        ZIndex = 3,
+    }, titleBar)
+    new("UICorner", { CornerRadius = UDim.new(0, 8) }, closeBtn)
+    local closeStroke = new("UIStroke", { Color = C.strokeSoft, Thickness = 1 }, closeBtn)
+
+    minBtn.MouseEnter:Connect(function()
+        TweenService:Create(minBtn, C.tween, { BackgroundColor3 = C.hover }):Play()
+        TweenService:Create(minStroke, C.tween, { Color = C.accent, Transparency = 0.35 }):Play()
+    end)
+    minBtn.MouseLeave:Connect(function()
+        TweenService:Create(minBtn, C.tween, { BackgroundColor3 = C.panel2 }):Play()
+        TweenService:Create(minStroke, C.tween, { Color = C.strokeSoft, Transparency = 0 }):Play()
+    end)
+    closeBtn.MouseEnter:Connect(function()
+        TweenService:Create(closeBtn, C.tween, { BackgroundColor3 = C.danger }):Play()
+        TweenService:Create(closeBtn, C.tween, { TextColor3 = Color3.fromRGB(255, 255, 255) }):Play()
+        TweenService:Create(closeStroke, C.tween, { Color = Color3.fromRGB(255, 130, 140), Transparency = 0.2 }):Play()
+    end)
+    closeBtn.MouseLeave:Connect(function()
+        TweenService:Create(closeBtn, C.tween, { BackgroundColor3 = C.panel2 }):Play()
+        TweenService:Create(closeBtn, C.tween, { TextColor3 = C.text }):Play()
+        TweenService:Create(closeStroke, C.tween, { Color = C.strokeSoft, Transparency = 0 }):Play()
+    end)
+
+    minBtn.MouseButton1Click:Connect(function()
+        main.Visible = false
+        shadow.Visible = false
+        reopen.Visible = true
+    end)
+    closeBtn.MouseButton1Click:Connect(function()
+        main.Visible = false
+        shadow.Visible = false
+        reopen.Visible = true
+    end)
+end
+
 reopen.MouseButton1Click:Connect(function()
     main.Visible = true
+    shadow.Visible = true
     reopen.Visible = false
 end)
 
@@ -3307,6 +3452,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.RightShift then
         main.Visible = not main.Visible
+        shadow.Visible = main.Visible
         reopen.Visible = not main.Visible
     elseif input.KeyCode == Enum.KeyCode.End then
         safeCall(killSwitch)
@@ -3317,16 +3463,16 @@ end)
 --==================== WIDGETS ====================
 local function makeToggle(parent, text, default, callback)
     local row = new("Frame", {
-        Size = UDim2.new(1, 0, 0, 36),
+        Size = UDim2.new(1, 0, 0, 38),
         BackgroundColor3 = C.panel,
         BorderSizePixel = 0,
     }, parent)
-    new("UICorner", { CornerRadius = UDim.new(0, 8) }, row)
-    new("UIStroke", { Color = C.stroke, Thickness = 1 }, row)
+    new("UICorner", { CornerRadius = UDim.new(0, 9) }, row)
+    local rowStroke = new("UIStroke", { Color = C.strokeSoft, Thickness = 1 }, row)
 
     new("TextLabel", {
-        Size = UDim2.new(1, -72, 1, 0),
-        Position = UDim2.new(0, 12, 0, 0),
+        Size = UDim2.new(1, -78, 1, 0),
+        Position = UDim2.new(0, 13, 0, 0),
         BackgroundTransparency = 1,
         Text = text,
         TextColor3 = C.text,
@@ -3338,7 +3484,7 @@ local function makeToggle(parent, text, default, callback)
 
     local btn = new("TextButton", {
         Size = UDim2.new(0, 40, 0, 20),
-        Position = UDim2.new(1, -52, 0.5, -10),
+        Position = UDim2.new(1, -54, 0.5, -10),
         BackgroundColor3 = default and C.accent or C.off,
         Text = "",
         AutoButtonColor = false,
@@ -3353,19 +3499,36 @@ local function makeToggle(parent, text, default, callback)
         BorderSizePixel = 0,
     }, btn)
     new("UICorner", { CornerRadius = UDim.new(1, 0) }, knob)
+    new("UIStroke", { Color = Color3.fromRGB(0, 0, 0), Transparency = 0.82, Thickness = 1 }, knob)
 
     local state = default and true or false
 
-    local function render()
-        btn.BackgroundColor3 = state and C.accent or C.off
-        knob.Position = state and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+    local function render(animate)
+        local pos = state and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+        local color = state and C.accent or C.off
+        if animate then
+            TweenService:Create(knob, C.tween, { Position = pos }):Play()
+            TweenService:Create(btn, C.tween, { BackgroundColor3 = color }):Play()
+        else
+            knob.Position = pos
+            btn.BackgroundColor3 = color
+        end
     end
+
+    row.MouseEnter:Connect(function()
+        TweenService:Create(row, C.tween, { BackgroundColor3 = C.panel2 }):Play()
+        TweenService:Create(rowStroke, C.tween, { Color = C.stroke }):Play()
+    end)
+    row.MouseLeave:Connect(function()
+        TweenService:Create(row, C.tween, { BackgroundColor3 = C.panel }):Play()
+        TweenService:Create(rowStroke, C.tween, { Color = C.strokeSoft }):Play()
+    end)
 
     local api = {}
     api.get = function() return state end
     api.set = function(v)
         state = v and true or false
-        render()
+        render(true)
         safeCall(callback, state)
     end
 
@@ -3373,25 +3536,25 @@ local function makeToggle(parent, text, default, callback)
         api.set(not state)
     end)
 
-    render()
+    render(false)
     return api
 end
 
 local function makeSlider(parent, text, min, max, default, callback)
     local row = new("Frame", {
-        Size = UDim2.new(1, 0, 0, 56),
+        Size = UDim2.new(1, 0, 0, 58),
         BackgroundColor3 = C.panel,
         BorderSizePixel = 0,
     }, parent)
-    new("UICorner", { CornerRadius = UDim.new(0, 8) }, row)
-    new("UIStroke", { Color = C.stroke, Thickness = 1 }, row)
+    new("UICorner", { CornerRadius = UDim.new(0, 9) }, row)
+    local rowStroke = new("UIStroke", { Color = C.strokeSoft, Thickness = 1 }, row)
 
     local decimals = (max - min) > 10 and 0 or 2
     local fmt = decimals == 0 and "%.0f" or "%.2f"
 
     new("TextLabel", {
-        Size = UDim2.new(1, -88, 0, 20),
-        Position = UDim2.new(0, 12, 0, 6),
+        Size = UDim2.new(1, -96, 0, 20),
+        Position = UDim2.new(0, 13, 0, 7),
         BackgroundTransparency = 1,
         Text = text,
         TextColor3 = C.text,
@@ -3402,19 +3565,21 @@ local function makeSlider(parent, text, min, max, default, callback)
     }, row)
 
     local valueLabel = new("TextLabel", {
-        Size = UDim2.new(0, 72, 0, 20),
-        Position = UDim2.new(1, -84, 0, 6),
-        BackgroundTransparency = 1,
+        Size = UDim2.new(0, 54, 0, 20),
+        Position = UDim2.new(1, -66, 0, 7),
+        BackgroundColor3 = C.panel2,
         Text = string.format(fmt, default),
         TextColor3 = C.accent2,
-        TextSize = 12,
+        TextSize = 11,
         Font = Enum.Font.GothamBold,
-        TextXAlignment = Enum.TextXAlignment.Right,
+        BorderSizePixel = 0,
+        TextXAlignment = Enum.TextXAlignment.Center,
     }, row)
+    new("UICorner", { CornerRadius = UDim.new(0, 6) }, valueLabel)
 
     local track = new("Frame", {
-        Size = UDim2.new(1, -24, 0, 5),
-        Position = UDim2.new(0, 12, 0, 38),
+        Size = UDim2.new(1, -26, 0, 6),
+        Position = UDim2.new(0, 13, 0, 39),
         BackgroundColor3 = C.off,
         BorderSizePixel = 0,
     }, row)
@@ -3426,14 +3591,22 @@ local function makeSlider(parent, text, min, max, default, callback)
         BorderSizePixel = 0,
     }, track)
     new("UICorner", { CornerRadius = UDim.new(1, 0) }, fill)
+    new("UIGradient", {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, C.accentDark),
+            ColorSequenceKeypoint.new(1, C.accent2),
+        }),
+    }, fill)
 
     local knob = new("Frame", {
         Size = UDim2.new(0, 14, 0, 14),
         Position = UDim2.new(0, 0, 0.5, -7),
         BackgroundColor3 = Color3.fromRGB(255, 255, 255),
         BorderSizePixel = 0,
+        ZIndex = 2,
     }, track)
     new("UICorner", { CornerRadius = UDim.new(1, 0) }, knob)
+    new("UIStroke", { Color = C.accent, Thickness = 2 }, knob)
 
     local hit = new("TextButton", {
         Size = UDim2.new(1, 0, 1, 0),
@@ -3460,6 +3633,15 @@ local function makeSlider(parent, text, min, max, default, callback)
         value = min + (max - min) * alpha
         render()
     end
+
+    row.MouseEnter:Connect(function()
+        TweenService:Create(row, C.tween, { BackgroundColor3 = C.panel2 }):Play()
+        TweenService:Create(rowStroke, C.tween, { Color = C.stroke }):Play()
+    end)
+    row.MouseLeave:Connect(function()
+        TweenService:Create(row, C.tween, { BackgroundColor3 = C.panel }):Play()
+        TweenService:Create(rowStroke, C.tween, { Color = C.strokeSoft }):Play()
+    end)
 
     hit.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -3497,6 +3679,8 @@ end
 
 local function makeButton(parent, text, callback, color)
     local base = color or C.panel2
+    local hoverColor = base:Lerp(Color3.fromRGB(255, 255, 255), 0.12)
+    local pressColor = base:Lerp(Color3.fromRGB(0, 0, 0), 0.14)
     local btn = new("TextButton", {
         Size = UDim2.new(1, 0, 0, 36),
         BackgroundColor3 = base,
@@ -3506,11 +3690,24 @@ local function makeButton(parent, text, callback, color)
         Font = Enum.Font.GothamMedium,
         BorderSizePixel = 0,
         AutoButtonColor = false,
+        TextTruncate = Enum.TextTruncate.AtEnd,
     }, parent)
-    new("UICorner", { CornerRadius = UDim.new(0, 8) }, btn)
-    new("UIStroke", { Color = C.stroke, Thickness = 1 }, btn)
-    btn.MouseEnter:Connect(function() btn.BackgroundColor3 = C.hover end)
-    btn.MouseLeave:Connect(function() btn.BackgroundColor3 = base end)
+    new("UICorner", { CornerRadius = UDim.new(0, 9) }, btn)
+    local stroke = new("UIStroke", { Color = C.strokeSoft, Thickness = 1 }, btn)
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, C.tween, { BackgroundColor3 = hoverColor }):Play()
+        TweenService:Create(stroke, C.tween, { Color = C.accent, Transparency = 0.45 }):Play()
+    end)
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, C.tween, { BackgroundColor3 = base }):Play()
+        TweenService:Create(stroke, C.tween, { Color = C.strokeSoft, Transparency = 0 }):Play()
+    end)
+    btn.MouseButton1Down:Connect(function()
+        TweenService:Create(btn, C.tween, { BackgroundColor3 = pressColor }):Play()
+    end)
+    btn.MouseButton1Up:Connect(function()
+        TweenService:Create(btn, C.tween, { BackgroundColor3 = hoverColor }):Play()
+    end)
     btn.MouseButton1Click:Connect(function()
         safeCall(callback)
     end)
@@ -3520,10 +3717,10 @@ end
 local function makeTextbox(parent, placeholder, callback)
     local box = new("TextBox", {
         Size = UDim2.new(1, 0, 0, 36),
-        BackgroundColor3 = C.panel2,
+        BackgroundColor3 = C.panel,
         Text = "",
         PlaceholderText = placeholder,
-        PlaceholderColor3 = C.sub,
+        PlaceholderColor3 = C.sub2,
         TextColor3 = C.text,
         TextSize = 13,
         Font = Enum.Font.GothamMedium,
@@ -3531,13 +3728,17 @@ local function makeTextbox(parent, placeholder, callback)
         ClearTextOnFocus = false,
         TextXAlignment = Enum.TextXAlignment.Left,
     }, parent)
-    new("UICorner", { CornerRadius = UDim.new(0, 8) }, box)
-    new("UIStroke", { Color = C.stroke, Thickness = 1 }, box)
+    new("UICorner", { CornerRadius = UDim.new(0, 9) }, box)
+    local stroke = new("UIStroke", { Color = C.strokeSoft, Thickness = 1 }, box)
     new("UIPadding", {
-        PaddingLeft = UDim.new(0, 10),
-        PaddingRight = UDim.new(0, 10),
+        PaddingLeft = UDim.new(0, 11),
+        PaddingRight = UDim.new(0, 11),
     }, box)
+    box.Focused:Connect(function()
+        TweenService:Create(stroke, C.tween, { Color = C.accent, Transparency = 0.1 }):Play()
+    end)
     box.FocusLost:Connect(function(enter)
+        TweenService:Create(stroke, C.tween, { Color = C.strokeSoft, Transparency = 0 }):Play()
         if enter then
             safeCall(callback, box.Text)
         end
@@ -3547,7 +3748,7 @@ end
 
 local function makeLabel(parent, text, wrapped)
     return new("TextLabel", {
-        Size = UDim2.new(1, 0, 0, wrapped and 30 or 20),
+        Size = UDim2.new(1, 0, 0, wrapped and 32 or 20),
         BackgroundTransparency = 1,
         Text = text,
         TextColor3 = C.sub,
@@ -3562,17 +3763,30 @@ end
 -- cabeçalho de seção, no estilo dos hubs genéricos
 local function makeSection(parent, text)
     local holder = new("Frame", {
-        Size = UDim2.new(1, 0, 0, 22),
+        Size = UDim2.new(1, 0, 0, 26),
         BackgroundTransparency = 1,
     }, parent)
+    new("UICorner", { CornerRadius = UDim.new(1, 0) }, new("Frame", {
+        Size = UDim2.new(0, 3, 0, 12),
+        Position = UDim2.new(0, 0, 0.5, -6),
+        BackgroundColor3 = C.accent,
+        BorderSizePixel = 0,
+    }, holder))
     new("TextLabel", {
-        Size = UDim2.new(1, 0, 1, 0),
+        Size = UDim2.new(1, -12, 0, 18),
+        Position = UDim2.new(0, 11, 0, 1),
         BackgroundTransparency = 1,
         Text = string.upper(tostring(text)),
         TextColor3 = C.accent2,
         TextSize = 10,
         Font = Enum.Font.GothamBold,
         TextXAlignment = Enum.TextXAlignment.Left,
+    }, holder)
+    new("Frame", {
+        Size = UDim2.new(1, 0, 0, 1),
+        Position = UDim2.new(0, 0, 1, -1),
+        BackgroundColor3 = C.strokeSoft,
+        BorderSizePixel = 0,
     }, holder)
     return holder
 end
@@ -3588,17 +3802,17 @@ local function makeScrollList(parent, height)
         ScrollBarImageColor3 = C.accent,
         ScrollingDirection = Enum.ScrollingDirection.Y,
     }, parent)
-    new("UICorner", { CornerRadius = UDim.new(0, 8) }, sf)
-    new("UIStroke", { Color = C.stroke, Thickness = 1 }, sf)
+    new("UICorner", { CornerRadius = UDim.new(0, 10) }, sf)
+    new("UIStroke", { Color = C.strokeSoft, Thickness = 1 }, sf)
     new("UIListLayout", {
         Padding = UDim.new(0, 4),
         SortOrder = Enum.SortOrder.LayoutOrder,
     }, sf)
     new("UIPadding", {
-        PaddingTop = UDim.new(0, 6),
-        PaddingBottom = UDim.new(0, 6),
-        PaddingLeft = UDim.new(0, 6),
-        PaddingRight = UDim.new(0, 6),
+        PaddingTop = UDim.new(0, 7),
+        PaddingBottom = UDim.new(0, 7),
+        PaddingLeft = UDim.new(0, 7),
+        PaddingRight = UDim.new(0, 7),
     }, sf)
     return sf
 end
@@ -3613,20 +3827,30 @@ end
 
 local function addListButton(sf, text, callback, color)
     local base = color or C.panel2
+    local hoverColor = base:Lerp(Color3.fromRGB(255, 255, 255), 0.08)
     local b = new("TextButton", {
         Size = UDim2.new(1, -12, 0, 30),
         BackgroundColor3 = base,
-        Text = "  " .. tostring(text),
+        Text = tostring(text),
         TextColor3 = C.text,
         TextSize = 12,
         Font = Enum.Font.GothamMedium,
         BorderSizePixel = 0,
         AutoButtonColor = false,
         TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
     }, sf)
-    new("UICorner", { CornerRadius = UDim.new(0, 6) }, b)
-    b.MouseEnter:Connect(function() b.BackgroundColor3 = C.hover end)
-    b.MouseLeave:Connect(function() b.BackgroundColor3 = base end)
+    new("UICorner", { CornerRadius = UDim.new(0, 7) }, b)
+    new("UIPadding", {
+        PaddingLeft = UDim.new(0, 10),
+        PaddingRight = UDim.new(0, 8),
+    }, b)
+    b.MouseEnter:Connect(function()
+        TweenService:Create(b, C.tween, { BackgroundColor3 = hoverColor }):Play()
+    end)
+    b.MouseLeave:Connect(function()
+        TweenService:Create(b, C.tween, { BackgroundColor3 = base }):Play()
+    end)
     b.MouseButton1Click:Connect(function()
         safeCall(callback)
     end)
@@ -3640,9 +3864,9 @@ local activeTab = nil
 local function makeTab(name, order)
     local btn = new("TextButton", {
         Size = UDim2.new(1, 0, 0, 34),
-        BackgroundColor3 = C.panel,
+        BackgroundColor3 = C.accent,
         BackgroundTransparency = 1,
-        Text = "  " .. name,
+        Text = name,
         TextColor3 = C.sub,
         TextSize = 13,
         Font = Enum.Font.GothamMedium,
@@ -3651,7 +3875,18 @@ local function makeTab(name, order)
         AutoButtonColor = false,
         LayoutOrder = order,
     }, tabBar)
-    new("UICorner", { CornerRadius = UDim.new(0, 8) }, btn)
+    new("UICorner", { CornerRadius = UDim.new(0, 9) }, btn)
+    new("UIPadding", { PaddingLeft = UDim.new(0, 13), PaddingRight = UDim.new(0, 8) }, btn)
+    local indicator = new("Frame", {
+        Size = UDim2.new(0, 3, 0, 16),
+        Position = UDim2.new(0, 5, 0.5, -8),
+        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+        BackgroundTransparency = 0.25,
+        BorderSizePixel = 0,
+        Visible = false,
+    }, btn)
+    new("UICorner", { CornerRadius = UDim.new(1, 0) }, indicator)
+    local btnStroke = new("UIStroke", { Color = C.accent2, Transparency = 1, Thickness = 1 }, btn)
 
     local frame = new("ScrollingFrame", {
         Size = UDim2.new(1, 0, 1, 0),
@@ -3670,24 +3905,62 @@ local function makeTab(name, order)
     }, frame)
     new("UIPadding", {
         PaddingTop = UDim.new(0, 2),
-        PaddingBottom = UDim.new(0, 8),
+        PaddingBottom = UDim.new(0, 10),
         PaddingLeft = UDim.new(0, 2),
         PaddingRight = UDim.new(0, 2),
     }, frame)
 
-    tabs[name] = { btn = btn, frame = frame }
+    -- cabeçalho da aba
+    local header = new("Frame", {
+        Size = UDim2.new(1, 0, 0, 36),
+        BackgroundTransparency = 1,
+        LayoutOrder = -1,
+    }, frame)
+    new("UICorner", { CornerRadius = UDim.new(1, 0) }, new("Frame", {
+        Size = UDim2.new(0, 3, 0, 16),
+        Position = UDim2.new(0, 0, 0.5, -8),
+        BackgroundColor3 = C.accent,
+        BorderSizePixel = 0,
+    }, header))
+    new("TextLabel", {
+        Size = UDim2.new(1, -100, 0, 22),
+        Position = UDim2.new(0, 11, 0, 0),
+        BackgroundTransparency = 1,
+        Text = name,
+        TextColor3 = C.text,
+        TextSize = 18,
+        Font = Enum.Font.GothamBold,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, header)
+    new("TextLabel", {
+        Size = UDim2.new(0, 88, 0, 22),
+        Position = UDim2.new(1, -88, 0, 0),
+        BackgroundTransparency = 1,
+        Text = "PRISMA HUB",
+        TextColor3 = C.sub2,
+        TextSize = 9,
+        Font = Enum.Font.GothamBold,
+        TextXAlignment = Enum.TextXAlignment.Right,
+    }, header)
+    new("Frame", {
+        Size = UDim2.new(1, 0, 0, 1),
+        Position = UDim2.new(0, 0, 1, 0),
+        BackgroundColor3 = C.strokeSoft,
+        BorderSizePixel = 0,
+    }, header)
+
+    tabs[name] = { btn = btn, frame = frame, indicator = indicator, stroke = btnStroke }
 
     btn.MouseEnter:Connect(function()
         if activeTab ~= name then
-            btn.BackgroundTransparency = 0.85
-            btn.BackgroundColor3 = C.panel
-            btn.TextColor3 = C.text
+            TweenService:Create(btn, C.tween, { BackgroundTransparency = 0.84 }):Play()
+            TweenService:Create(btn, C.tween, { TextColor3 = C.text }):Play()
         end
     end)
     btn.MouseLeave:Connect(function()
         if activeTab ~= name then
-            btn.BackgroundTransparency = 1
-            btn.TextColor3 = C.sub
+            TweenService:Create(btn, C.tween, { BackgroundTransparency = 1 }):Play()
+            TweenService:Create(btn, C.tween, { TextColor3 = C.sub }):Play()
         end
     end)
 
@@ -3697,13 +3970,19 @@ local function makeTab(name, order)
             local active = (n == name)
             t.frame.Visible = active
             t.btn.BackgroundTransparency = active and 0 or 1
-            t.btn.BackgroundColor3 = active and C.accent or C.panel
+            t.btn.BackgroundColor3 = C.accent
             t.btn.TextColor3 = active and Color3.fromRGB(255, 255, 255) or C.sub
+            if t.indicator then t.indicator.Visible = active end
+            if t.stroke then t.stroke.Transparency = active and 0.4 or 1 end
         end
         if name == "Farm" and UI.refreshMobs then safeCall(UI.refreshMobs) end
         if name == "Boss" and UI.refreshBosses then safeCall(UI.refreshBosses) end
         if name == "Util" and UI.refreshPlayers then safeCall(UI.refreshPlayers) end
         if name == "ESP" and UI.refreshFruits then safeCall(UI.refreshFruits) end
+        if name == "Combat" then
+            if UI.refreshFightingStyle then safeCall(UI.refreshFightingStyle) end
+            if UI.rebuildFightingStyles then safeCall(UI.rebuildFightingStyles) end
+        end
     end)
     return frame
 end
@@ -4073,7 +4352,202 @@ end -- Boss
 do
 local combatTab = makeTab("Combat", 4)
 
-makeLabel(combatTab, "Skills usam o RemoteFunction da arma equipada (Z/X/C). Precisa de alvo vivo perto.", true)
+-- estilos de luta: no Blox Fruits cada estilo é uma Tool na mochila/personagem
+do
+local FIGHTING_STYLES = {
+    "Combat",
+    "Black Leg",
+    "Dark Step",
+    "Water Kung Fu",
+    "Electro",
+    "Fishman Karate",
+    "Dragon Claw",
+    "Superhuman",
+    "Death Step",
+    "Sharkman Karate",
+    "Electric Claw",
+    "Dragon Talon",
+    "Godhuman",
+    "Sanguine Art",
+    "Dragon Breath",
+    "Divine Arts",
+}
+
+local function styleKey(s)
+    return string.lower(tostring(s or ""))
+end
+
+local function findStyleTool(name)
+    local target = styleKey(name)
+    local char = getChar()
+    local backpack = LP:FindFirstChild("Backpack")
+    local containers = {}
+    if char then table.insert(containers, char) end
+    if backpack then table.insert(containers, backpack) end
+    for _, container in ipairs(containers) do
+        for _, tool in ipairs(container:GetChildren()) do
+            if tool:IsA("Tool") and styleKey(tool.Name) == target then
+                return tool
+            end
+        end
+    end
+    return nil
+end
+
+local function equippedStyleName()
+    local char = getChar()
+    if char then
+        local tool = char:FindFirstChildOfClass("Tool")
+        if tool then
+            for _, style in ipairs(FIGHTING_STYLES) do
+                if styleKey(style) == styleKey(tool.Name) then
+                    return tool.Name
+                end
+            end
+            local tip = tostring(tool.ToolTip)
+            if tip == "Fighting Style" or tip == "Melee" then
+                return tool.Name
+            end
+        end
+    end
+    return "Combat"
+end
+
+local function currentStyleText()
+    local name = equippedStyleName()
+    local char = getChar()
+    local tool = char and char:FindFirstChildOfClass("Tool")
+    if tool and styleKey(tool.Name) ~= styleKey(name) then
+        return name .. " (arma: " .. tool.Name .. ")"
+    end
+    return name
+end
+
+local function refreshFightingStyle()
+    if UI.fightingStyleLabel then
+        UI.fightingStyleLabel.Text = "Estilo atual: " .. currentStyleText()
+    end
+end
+
+local function equipFightingStyle(name)
+    local char = getChar()
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not hum then
+        setStatus("Personagem não encontrado", true)
+        return
+    end
+
+    -- "Combat" é o estilo padrão; normalmente não existe como Tool
+    if styleKey(name) == "combat" and not findStyleTool(name) then
+        pcall(function() hum:UnequipTools() end)
+        State.lastToolName = nil
+        State.fightingStyle = "Combat"
+        refreshFightingStyle()
+        setStatus("Estilo padrão (Combat) selecionado")
+        return
+    end
+
+    local tool = findStyleTool(name)
+    if not tool then
+        setStatus("Estilo " .. tostring(name) .. " não está na mochila (não desbloqueado?)", true)
+        return
+    end
+
+    local equipped = char:FindFirstChildOfClass("Tool")
+    if equipped and equipped.Name == tool.Name then
+        State.fightingStyle = tool.Name
+        State.lastToolName = tool.Name
+        refreshFightingStyle()
+        setStatus("Estilo já equipado: " .. tool.Name)
+        return
+    end
+
+    pcall(function() hum:EquipTool(tool) end)
+    task.wait(0.2)
+
+    local now = char:FindFirstChildOfClass("Tool")
+    if not now or now.Name ~= tool.Name then
+        pcall(function() tool.Parent = char end)
+        task.wait(0.1)
+        now = char:FindFirstChildOfClass("Tool")
+    end
+
+    if now and now.Name == tool.Name then
+        State.fightingStyle = tool.Name
+        State.lastToolName = tool.Name
+        refreshFightingStyle()
+        setStatus("Estilo equipado: " .. tool.Name)
+    else
+        setStatus("Não foi possível equipar " .. tool.Name, true)
+    end
+end
+
+local function styleList()
+    local names = {}
+    local seen = {}
+    for _, style in ipairs(FIGHTING_STYLES) do
+        seen[styleKey(style)] = true
+        table.insert(names, style)
+    end
+
+    -- descobre estilos novos que estejam na mochila/personagem
+    local char = getChar()
+    local backpack = LP:FindFirstChild("Backpack")
+    local containers = {}
+    if char then table.insert(containers, char) end
+    if backpack then table.insert(containers, backpack) end
+    for _, container in ipairs(containers) do
+        for _, tool in ipairs(container:GetChildren()) do
+            if tool:IsA("Tool") then
+                local tip = tostring(tool.ToolTip)
+                local key = styleKey(tool.Name)
+                if (tip == "Fighting Style" or tip == "Melee") and not seen[key] then
+                    seen[key] = true
+                    table.insert(names, tool.Name)
+                end
+            end
+        end
+    end
+    return names
+end
+
+UI.equipFightingStyle = equipFightingStyle
+UI.refreshFightingStyle = refreshFightingStyle
+UI.styleList = styleList
+UI.equippedStyleName = equippedStyleName
+UI.currentStyleText = currentStyleText
+end
+
+makeLabel(combatTab, "Troque o estilo de luta abaixo. Skills usam o RemoteFunction da arma equipada (Z/X/C).", true)
+
+makeSection(combatTab, "Estilo de luta")
+
+UI.fightingStyleLabel = makeLabel(combatTab, "Estilo atual: " .. UI.currentStyleText(), true)
+
+UI.fightingStyleFrame = makeScrollList(combatTab, 150)
+
+UI.rebuildFightingStyles = function()
+    local frame = UI.fightingStyleFrame
+    if not frame then return end
+    clearList(frame)
+    local current = UI.equippedStyleName()
+    for _, name in ipairs(UI.styleList()) do
+        local active = string.lower(name) == string.lower(current)
+        addListButton(frame, name, function()
+            UI.equipFightingStyle(name)
+            UI.rebuildFightingStyles()
+        end, active and C.accent or C.panel2)
+    end
+end
+UI.rebuildFightingStyles()
+
+makeButton(combatTab, "Atualizar lista de estilos", function()
+    UI.rebuildFightingStyles()
+    UI.refreshFightingStyle()
+    setStatus("Lista de estilos atualizada")
+end)
+
+makeLabel(combatTab, "Cada estilo é uma Tool na mochila. Se não aparecer, desbloqueie no NPC. 'Combat' volta ao estilo padrão.", true)
 
 makeSection(combatTab, "Skills")
 
