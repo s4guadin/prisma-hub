@@ -177,14 +177,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
 | Arquivo | O que é |
 |---|---|
 | `MEMORIA.md` | Este documento. Ler antes de abrir código. |
-| `hub.lua` | Prisma Hub 1.9.1 (arquivo único). |
+| `hub.lua` | Prisma Hub 1.9.2 (arquivo único). |
 | `teste.lua` | Teste mínimo de GUI (quadrado azul "GUI OK"). |
 
 ## 8. Estado atual
 
 - Planejamento: **completo** (este arquivo).
-- Código: **Fase 1.9.1** em `hub.lua`.
-- Versão atual: `1.9.1` (Prisma Hub).
+- Código: **Fase 1.9.2** em `hub.lua`.
+- Versão atual: `1.9.2` (Prisma Hub).
 
 ### Mudanças da 1.4 (pacote "Tudo" inspirado em hubs públicos)
 - **Renomeado para Prisma Hub** (`CONFIG.name`, título da janela, botão de reabrir "P").
@@ -519,4 +519,14 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   - Continua dependendo dos requisitos do servidor: nível, Beli/fragmentos e
     pré-requisitos de cada estilo. Se o servidor recusar, o hub avisa na barra de
     status em vez de fingir que equipou.
+  - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).
+- **Lista de estilos só com os aprendidos (1.9.2)**:
+  - A aba Combat agora mostra **apenas os estilos que o jogador realmente tem**
+    (Tools de fighting style na mochila/personagem), mais `Combat` como estilo
+    padrão. Estilos não aprendidos não aparecem mais e o marcador `(comprar)`
+    foi removido.
+  - Removida a compra automática de estilo (`UI.styleBuy`,
+    `UI.buyFightingStyle`, `State.autoBuyStyle` e o toggle correspondente).
+  - Se nenhum estilo além de `Combat` for encontrado, a lista mostra
+    "Nenhum estilo aprendido ainda".
   - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).

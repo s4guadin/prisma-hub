@@ -11,7 +11,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/s4guadin/prisma-hub/m
 - **Farm** — lista mobs matáveis de `Workspace.Enemies` com nível; clique escolhe o mob do Auto Farm e, sem seleção, ele escolhe o melhor para o seu nível. Inclui **Farm instantâneo** (`SimulationRadius` + `Humanoid.Health = 0`), Auto Quest (1º/2º/3º mar) e ataque rápido.
 - **Raid** — aba dedicada ao **Auto Raid** de verdade: compra/equipa o Microchip, teleporta até o botão da raid, entra e fica **pairando alto (~55 studs) sobre o centro de cada ilha**, matando na hora tudo o que aparece no raio (sem atacar). Só avança quando a ilha está limpa. Inclui seletor de chip, comprar chip, checar raid e Auto Awakening.
 - **Boss** — aba separada com bosses vivos no servidor, TP e Auto Boss.
-- **Combat** — **troca e compra de estilo de luta sem ir ao NPC**: lista os estilos desbloqueados na mochila e marca os que faltam com `(comprar)`; ao clicar, o hub chama o remote de compra do servidor e já equipa a Tool. Inclui Auto Skills Z/X/C (via `Tool.RemoteFunction`), Auto Ataque, Kill Aura instantâneo (mata mobs no raio via `SimulationRadius` + `Humanoid.Health = 0`), Auto Stats com atributo ciclável.
+- **Combat** — **troca de estilo de luta**: mostra apenas os estilos que você já aprendeu (Tools na mochila) + `Combat` padrão; clique para equipar. Inclui Auto Skills Z/X/C (via `Tool.RemoteFunction`), Auto Ataque, Kill Aura instantâneo (mata mobs no raio via `SimulationRadius` + `Humanoid.Health = 0`), Auto Stats com atributo ciclável.
 - **ESP** — jogadores, bosses, frutas e baús (`Highlight` + `BillboardGui` com nome e distância).
 - **Frutas** - notificador (inclui frutas spawnadas pelo servidor), timer estimado de spawn (~60 min, ~45 min no fim de semana), lista, teleporte, "puxar fruta" e **auto guardar fruta** (confere o espaço por fruta antes de guardar; não guarda se estiver cheio).
 - **Util** — fly, noclip, pulo infinito, server hop, reconectar, auto rejoin, anti-AFK, espectar, TP por coordenadas.
@@ -42,4 +42,4 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/s4guadin/prisma-hub/m
 
 ## Versão
 
-`1.9.1` - Prisma Hub
+`1.9.2` - Prisma Hub
