@@ -177,14 +177,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
 | Arquivo | O que é |
 |---|---|
 | `MEMORIA.md` | Este documento. Ler antes de abrir código. |
-| `hub.lua` | Prisma Hub 1.9.9 (arquivo único). |
+| `hub.lua` | Prisma Hub 1.10.0 (arquivo único). |
 | `teste.lua` | Teste mínimo de GUI (quadrado azul "GUI OK"). |
 
 ## 8. Estado atual
 
 - Planejamento: **completo** (este arquivo).
-- Código: **Fase 1.9.9** em `hub.lua`.
-- Versão atual: `1.9.9` (Prisma Hub).
+- Código: **Fase 1.10.0** em `hub.lua`.
+- Versão atual: `1.10.0` (Prisma Hub).
 
 ### Mudanças da 1.4 (pacote "Tudo" inspirado em hubs públicos)
 - **Renomeado para Prisma Hub** (`CONFIG.name`, título da janela, botão de reabrir "P").
@@ -630,4 +630,19 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   - Próximo passo depende do dump: se os mobs estão fora de `Workspace.Enemies`,
     o `raidMobsNear` precisa do caminho certo; se as ilhas 1..5 estão a
     milhares de studs, o hover está levando o player para fora da arena.
+  - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).
+- **Auto Raid vira navegador; Kill Aura mata a ilha (1.10.0)** — pedido do usuário:
+  - O Auto Raid **não mata mais**: ele detecta a raid (timer/`Raids` event),
+    **voa para o centro da ilha atual** e só avança (1 → 2 → 3 → 4 → 5) quando
+    não existe mob vivo em `RAID_KILL_RADIUS` (900) por `RAID_WAVE_GRACE` (5 s).
+  - Ao entrar na raid, o Auto Raid **liga o Kill Aura sozinho** (`raidAuraAuto`)
+    e o desliga de novo quando a raid acaba ou o toggle é desligado.
+  - Durante a raid o Kill Aura usa `math.max(slider, 900)` e coleta mobs via
+    `raidMobsNear` (inclui mobs fora de `Workspace.Enemies`).
+  - Proteção de crédito: 1.2 s de espera após chegar em uma ilha antes de
+    matar (deixa o boss/mobs nascerem e o servidor registrar).
+  - `State.raidIslandFor/raidMobSeen/raidIslandAt` controlam a troca de ilha;
+    se a ilha nunca teve mobs, só avança depois de 15 s (fallback).
+  - Mantidos o dump `UI.raidDump`, o log `ilha X sem mobs | Enemies=N` e o
+    cooldown de 25 s pós-raid.
   - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).

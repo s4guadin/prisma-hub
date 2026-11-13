@@ -1,5 +1,5 @@
 --[[
-    Prisma Hub - 1.9.9
+    Prisma Hub - 1.10.0
     Arquivo único. PC. Sem key. Anti-detecção básica.
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
@@ -49,7 +49,7 @@ local bootOk, bootErr = pcall(function()
 --==================== CONFIG ====================
 local CONFIG = {
     name = "Prisma Hub",
-    version = "1.9.9",
+    version = "1.10.0",
 
     jitter = 0.30,
     maxErrors = 3,
@@ -244,6 +244,10 @@ local State = {
     raidBossSeen = nil,
     raidCooldownUntil = nil,
     raidBusy = false,
+    raidIslandFor = nil,
+    raidMobSeen = false,
+    raidIslandAt = nil,
+    raidAuraAuto = nil,
     raidRunning = false,
     raidNoTimerSince = nil,
     raidIsland = nil,
@@ -2181,6 +2185,8 @@ local function setupRaidListener()
             State.raidCooldownUntil = nil
             State.raidIsland = raidCurrentIsland() or 1
             State.raidClearSince = nil
+            State.raidIslandFor = nil
+            State.raidIslandAt = os.clock()
             setRaidStatus("Raid iniciada")
             task.spawn(function()
                 task.wait(4)
@@ -2296,7 +2302,12 @@ local function raidLoop()
                     State.raidIsland = nil
                     State.raidClearSince = nil
                     State.raidReached = nil
+                    State.raidIslandFor = nil
                     raidStopHover()
+                    if State.raidAuraAuto and UI.toggles.killAura and UI.toggles.killAura.get() then
+                        UI.toggles.killAura.set(false)
+                    end
+                    State.raidAuraAuto = nil
                     -- dá tempo para a recompensa/notificação da raid aparecer
                     -- antes de comprar outro chip e entrar de novo
                     State.raidCooldownUntil = os.clock() + 25
@@ -2309,6 +2320,13 @@ local function raidLoop()
             if inRaid then
                 State.raidInRaid = true
 
+                -- Quem mata na raid é o Kill Aura (com alcance de ilha inteira).
+                -- Se ele estiver desligado, o Auto Raid liga sozinho.
+                if not State.killAura and UI.toggles.killAura then
+                    State.raidAuraAuto = true
+                    UI.toggles.killAura.set(true)
+                end
+
                 local idx = State.raidIsland or raidCurrentIsland() or 1
                 local island = raidIslandPart(idx)
                 if not island then
@@ -2318,75 +2336,56 @@ local function raidLoop()
                 State.raidIsland = idx
                 State.raidReached = math.max(State.raidReached or 1, idx)
 
-                local origin = island and island.Position or (getHRP() and getHRP().Position)
-                if island then
-                    raidSetHover(origin + Vector3.new(0, RAID_HOVER_HEIGHT, 0))
-                else
-                    UI.raidLog("marcador da ilha " .. tostring(idx) .. " não encontrado em _WorldOrigin.Locations")
-                end
-
-                -- cliente passa a simular os mobs; a morte zera a vida e replica
-                local simOk = forceSimulationRadius()
-
-                -- mata todos os inimigos vivos DA ILHA ATUAL (raio curto): matar
-                -- mobs de ilhas futuras fazia o servidor não creditar a raid
-                local mobs = raidMobsNear(origin, RAID_KILL_RADIUS)
-
-                -- na última ilha (boss), espera o boss nascer de verdade antes de
-                -- matar; matar no mesmo frame do spawn fazia a raid terminar sem
-                -- recompensa
-                local waitBoss = false
-                if idx >= 5 and #mobs > 0 then
-                    State.raidBossSeen = State.raidBossSeen or os.clock()
-                    waitBoss = (os.clock() - State.raidBossSeen) < 1.5
-                else
-                    State.raidBossSeen = nil
-                end
-
-                local killed = 0
-                local stubborn = nil
-                if not waitBoss then
-                    -- via rápida em lote: zera a vida de todos de uma vez
-                    for _, entry in ipairs(mobs) do
-                        pcall(function() entry.hum.Health = 0 end)
-                    end
-                    -- só os que sobreviveram entram no fallback (dono de rede/remotes)
-                    for _, entry in ipairs(mobs) do
-                        if entry.hum.Health <= 0 or UI.hardKill(entry.mob, true) then
-                            killed = killed + 1
-                        else
-                            stubborn = (stubborn and (stubborn .. ", ") or "") .. entry.mob.Name
-                        end
-                    end
-                end
-                State.raidBusy = (#mobs > 0)
-
-                if waitBoss then
-                    setRaidStatus("Raid: ilha " .. tostring(idx) .. " - aguardando o boss nascer")
-                elseif #mobs > 0 then
+                -- trocou de ilha: zera a checagem de "limpa"
+                if State.raidIslandFor ~= idx then
+                    State.raidIslandFor = idx
                     State.raidClearSince = nil
-                    local extra = simOk and "" or " (sem SimulationRadius)"
-                    setRaidStatus("Raid: ilha " .. tostring(idx) .. " - " .. killed .. " mobs mortos" .. extra)
-                    UI.raidLog("ilha " .. tostring(idx) .. ": " .. killed .. " mortos" ..
-                        (stubborn and (" | resistiram: " .. stubborn) or "") .. extra)
+                    State.raidMobSeen = false
+                    State.raidIslandAt = os.clock()
+                end
+
+                local origin = island and island.Position or (getHRP() and getHRP().Position)
+                if not origin then
+                    UI.raidLog("marcador da ilha " .. tostring(idx) .. " não encontrado")
                 else
-                    State.raidClearSince = State.raidClearSince or os.clock()
-                    local waited = os.clock() - State.raidClearSince
-                    if waited > 9 and (os.clock() - (State.raidIdleAt or 0)) > 10 then
-                        State.raidIdleAt = os.clock()
-                        local hrp2 = getHRP()
-                        UI.raidLog("ilha " .. tostring(idx) .. " sem mobs | Enemies=" .. #collectEnemies() ..
-                            (hrp2 and (" | player " .. math.floor(hrp2.Position.X) .. "," ..
-                                math.floor(hrp2.Position.Z)) or ""))
-                    end
-                    if waited >= RAID_WAVE_GRACE and idx < 5 then
-                        State.raidIsland = idx + 1
+                    -- voa para o centro da ilha atual e fica pairando
+                    raidSetHover(origin + Vector3.new(0, RAID_HOVER_HEIGHT, 0))
+
+                    local mobs = raidMobsNear(origin, RAID_KILL_RADIUS)
+                    if #mobs > 0 then
+                        State.raidBusy = true
                         State.raidClearSince = nil
-                        setRaidStatus("Raid: ilha " .. tostring(State.raidIsland) .. " (avançando)")
-                    elseif idx >= 5 then
-                        setRaidStatus("Raid: ilha 5 - esperando o boss/onda")
+                        State.raidMobSeen = true
+                        setRaidStatus("Raid: ilha " .. tostring(idx) .. " - " .. #mobs .. " mobs vivos")
                     else
-                        setRaidStatus("Raid: ilha " .. tostring(idx) .. " - esperando mobs")
+                        State.raidBusy = false
+                        State.raidClearSince = State.raidClearSince or os.clock()
+                        local waited = os.clock() - State.raidClearSince
+
+                        if waited > 9 and (os.clock() - (State.raidIdleAt or 0)) > 10 then
+                            State.raidIdleAt = os.clock()
+                            local hrp2 = getHRP()
+                            UI.raidLog("ilha " .. tostring(idx) .. " sem mobs | Enemies=" .. #collectEnemies() ..
+                                (hrp2 and (" | player " .. math.floor(hrp2.Position.X) .. "," ..
+                                    math.floor(hrp2.Position.Z)) or ""))
+                        end
+
+                        -- ilha limpa (ou sem mobs por tempo suficiente): vai para a próxima
+                        if waited >= RAID_WAVE_GRACE and (State.raidMobSeen or waited >= 15) then
+                            if idx < 5 then
+                                State.raidIsland = idx + 1
+                                State.raidIslandFor = nil
+                                State.raidClearSince = nil
+                                setRaidStatus("Raid: ilha " .. tostring(idx) .. " limpa -> indo para a ilha " .. tostring(idx + 1))
+                                UI.raidLog("ilha " .. tostring(idx) .. " limpa em " .. math.floor(waited) ..
+                                    "s -> indo para a ilha " .. tostring(idx + 1))
+                            else
+                                setRaidStatus("Raid: ilha 5 limpa - esperando o fim da raid")
+                            end
+                        else
+                            setRaidStatus("Raid: ilha " .. tostring(idx) .. " - limpa (" ..
+                                math.floor(waited) .. "/" .. RAID_WAVE_GRACE .. "s)")
+                        end
                     end
                 end
             else
@@ -2655,9 +2654,23 @@ local function killAuraLoop()
             end
 
             local radius = CONFIG.killAuraRange
+            -- na raid o Kill Aura pega a ilha toda (quem mata na raid é ele)
+            if State.raidInRaid then
+                radius = math.max(radius, RAID_KILL_RADIUS)
+            end
             local targets = {}
+            local mobList
 
-            for _, mob in ipairs(collectEnemies()) do
+            if State.raidInRaid then
+                mobList = {}
+                for _, entry in ipairs(raidMobsNear(hrp.Position, radius)) do
+                    mobList[#mobList + 1] = entry.mob
+                end
+            else
+                mobList = collectEnemies()
+            end
+
+            for _, mob in ipairs(mobList) do
                 local mhrp = mob:FindFirstChild("HumanoidRootPart")
                 local mhum = mob:FindFirstChildOfClass("Humanoid")
                 if mhrp and mhum and mhum.Health > 0 then
@@ -2678,7 +2691,8 @@ local function killAuraLoop()
                 end
             end
 
-            if #targets > 0 then
+            if #targets > 0 and not (State.raidInRaid and
+                (now - (State.raidIslandAt or 0)) < 1.2) then
                 -- mata direto no Humanoid, pedindo o dono de rede quando preciso
                 for _, t in ipairs(targets) do
                     pcall(function() UI.hardKill(t.mob, false) end)
@@ -4450,7 +4464,7 @@ end -- Farm
 do
 local raidTab = makeTab("Raid", 2)
 
-makeLabel(raidTab, "Auto Raid completo: compra/equipa o Microchip, entra na raid, fica pairando alto sobre cada ilha e mata os mobs na hora.", true)
+makeLabel(raidTab, "Auto Raid = navegador: compra/equipa o Microchip, entra na raid, voa para o centro de cada ilha e avança para a próxima quando a ilha está limpa. Quem mata é o Kill Aura (ligado automaticamente na raid, com alcance de ilha inteira).", true)
 
 makeSection(raidTab, "Auto Raid")
 
@@ -4524,6 +4538,13 @@ UI.toggles.autoRaid = makeToggle(raidTab, "Auto Raid", false, function(on)
         State.raidReached = nil
         State.raidBossSeen = nil
         State.raidCooldownUntil = nil
+        State.raidIslandFor = nil
+        State.raidMobSeen = false
+        -- se o Auto Raid ligou o Kill Aura sozinho, desliga de novo
+        if State.raidAuraAuto and UI.toggles.killAura and UI.toggles.killAura.get() then
+            UI.toggles.killAura.set(false)
+        end
+        State.raidAuraAuto = nil
         raidStopHover()
         setRaidStatus("Auto Raid desligado")
     end
@@ -4547,7 +4568,7 @@ makeLabel(raidTab, "Awakening usa CommF_ Awakener Check/Awaken a cada 2.5s.", tr
 
 makeSection(raidTab, "Ilhas da raid")
 
-makeLabel(raidTab, "O Auto Raid fica pairando ~55 studs acima do centro da ilha, mata tudo no raio e só avança quando a ilha está limpa.", true)
+makeLabel(raidTab, "O Auto Raid fica pairando ~55 studs acima do centro da ilha e só passa para a próxima quando não há mais mobs vivos no raio da ilha (o Kill Aura mata).", true)
 
 end -- Raid
 
