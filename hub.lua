@@ -1,5 +1,5 @@
 --[[
-    Prisma Hub - 1.9.3
+    Prisma Hub - 1.9.4
     Arquivo único. PC. Sem key. Anti-detecção básica.
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
@@ -49,7 +49,7 @@ local bootOk, bootErr = pcall(function()
 --==================== CONFIG ====================
 local CONFIG = {
     name = "Prisma Hub",
-    version = "1.9.3",
+    version = "1.9.4",
 
     jitter = 0.30,
     maxErrors = 3,
@@ -96,6 +96,10 @@ local PLACE_IDS = {
     [2753915549] = 1,
     [4442272183] = 2,
     [7449423635] = 3,
+    -- place ids novos do jogo (mesmos mares)
+    [85211729168715] = 1,
+    [79091703265657] = 2,
+    [100117331123089] = 3,
 }
 
 local ISLANDS = {
@@ -235,6 +239,7 @@ local State = {
     raidElement = "Flame",
     raidConn = nil,
     raidLastStart = 0,
+    raidEntryAt = nil,
     raidRunning = false,
     raidNoTimerSince = nil,
     raidIsland = nil,
@@ -277,18 +282,7 @@ local AURA = {
 local forceSimulationRadius
 
 --==================== RAID ====================
--- Locais do botão de raid (2º e 3º mar). O 1º mar não tem raid.
-local RAID_LOCATIONS = {
-    [2] = {
-        tube = Vector3.new(-6546.1, 310.5, -4767.7),
-        button = Vector3.new(-6530.7, 304.8, -4798.4),
-    },
-    [3] = {
-        tube = Vector3.new(-5010.1, 315.0, -2816.5),
-        button = Vector3.new(-5010.1, 315.0, -2816.5),
-    },
-}
-
+-- O botão da raid é encontrado dinamicamente em Workspace.Map (ver findRaidButton).
 local RAID_ELEMENTS = {
     "Flame", "Ice", "Quake", "Dark", "Light", "Sand", "Magma", "Rumble",
     "Buddha", "Paw", "Gravity", "Dough", "Shadow", "Venom", "Control",
@@ -1945,11 +1939,45 @@ end
 local function raidTimerVisible()
     local ok, visible = pcall(function()
         local main = LP.PlayerGui:FindFirstChild("Main")
-        local hud = main and main:FindFirstChild("TopHUDList")
+        if not main then return false end
+
+        -- caminho normal
+        local hud = main:FindFirstChild("TopHUDList")
         local timer = hud and hud:FindFirstChild("RaidTimer")
-        return timer and timer.Visible == true
+        if timer and timer.Visible then return true end
+
+        -- fallback: o jogo já mudou o caminho/nome mais de uma vez
+        local deep = main:FindFirstChild("RaidTimer", true)
+        if deep and deep.Visible then return true end
+
+        if hud then
+            for _, d in ipairs(hud:GetDescendants()) do
+                if d:IsA("TextLabel") and d.Visible then
+                    local txt = string.lower(tostring(d.Text or ""))
+                    if string.find(txt, "raid", 1, true) then
+                        return true
+                    end
+                end
+            end
+        end
+        return false
     end)
     return ok and visible == true
+end
+
+-- Coloca o personagem no ponto antes de prender o BodyPosition.
+-- Sem isso, um BodyPosition com MaxForce alto puxa o personagem de muito
+-- longe e ele sai voando sem rumo (overshoot).
+local function raidSnapTo(pos)
+    local hrp = getHRP()
+    if not hrp or not pos then return end
+    if (hrp.Position - pos).Magnitude <= 60 then return end
+    pcall(function()
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        hrp.CFrame = CFrame.new(pos)
+    end)
+    task.wait(0.12)
 end
 
 -- Mantém o personagem parado no ar (pairando) em uma posição.
@@ -1958,6 +1986,8 @@ local function raidSetHover(pos)
     local hrp = getHRP()
     local hum = getHum()
     if not hrp or not pos then return false end
+
+    raidSnapTo(pos)
 
     local old = hrp:FindFirstChild("PrismaRaidHover")
     if old and old:IsA("BodyPosition") then
@@ -2002,7 +2032,12 @@ end
 
 local function raidIslandPart(idx)
     local locations = raidLocations()
-    return locations and locations:FindFirstChild("Island " .. tostring(idx))
+    local obj = locations and locations:FindFirstChild("Island " .. tostring(idx))
+    if not obj then return nil end
+    if obj:IsA("BasePart") then return obj end
+    local primary = nil
+    if obj:IsA("Model") then primary = obj.PrimaryPart end
+    return primary or obj:FindFirstChildWhichIsA("BasePart")
 end
 
 -- ilha mais próxima do personagem (só para sincronizar no começo da raid)
@@ -2013,7 +2048,7 @@ local function raidCurrentIsland()
 
     local bestIdx, bestDist = nil, math.huge
     for i = 1, 5 do
-        local island = locations:FindFirstChild("Island " .. i)
+        local island = raidIslandPart(i)
         if island then
             local d = (hrp.Position - island.Position).Magnitude
             if d < bestDist then
@@ -2099,6 +2134,54 @@ local function raidTriggerAround(pos, radius)
     return fired
 end
 
+-- Procura o botão real da raid no mapa, sem depender de coordenada fixa.
+-- Caminhos atuais: Map.CircleIsland.RaidSummon2.Button.Main (2º mar)
+--                  Map["Boat Castle"].RaidSummon2.Button.Main (3º mar)
+local function findRaidButton()
+    local summon = nil
+    local map = Workspace:FindFirstChild("Map")
+    if map then
+        summon = map:FindFirstChild("RaidSummon2", true) or map:FindFirstChild("RaidSummon", true)
+    end
+    if not summon then
+        local ok, found = pcall(function()
+            return Workspace:FindFirstChild("RaidSummon2", true) or Workspace:FindFirstChild("RaidSummon", true)
+        end)
+        if ok then summon = found end
+    end
+    if not summon then return nil end
+
+    local button = summon:FindFirstChild("Button") or summon
+    local main = button:FindFirstChild("Main") or button
+    if not main then return nil end
+
+    local part = main:IsA("BasePart") and main or main:FindFirstChildWhichIsA("BasePart")
+    local prompt = main:FindFirstChildWhichIsA("ProximityPrompt", true)
+    local click = main:FindFirstChildWhichIsA("ClickDetector", true)
+    if part or prompt or click then
+        return part, prompt, click
+    end
+    return nil
+end
+
+local function raidButtonPos(part, prompt, click)
+    if part and part:IsA("BasePart") then return part.Position end
+    if prompt and prompt.Parent and prompt.Parent:IsA("BasePart") then return prompt.Parent.Position end
+    if click and click.Parent and click.Parent:IsA("BasePart") then return click.Parent.Position end
+    return nil
+end
+
+local function triggerRaidButton(part, prompt, click)
+    local fired = false
+    if prompt and fireproximityprompt then
+        fired = pcall(fireproximityprompt, prompt) or fired
+    end
+    if click and fireclickdetector then
+        fired = pcall(fireclickdetector, click) or fired
+    end
+    return fired
+end
+
 local function raidLoop()
     if State.raidRunning then return end
     State.raidRunning = true
@@ -2145,34 +2228,33 @@ local function raidLoop()
                 -- cliente passa a simular os mobs; a morte zera a vida e replica
                 local simOk = forceSimulationRadius()
 
-                if not simOk then
-                    setRaidStatus("Raid: executor sem sethiddenproperty (morte instantânea indisponível)", true)
-                else
-                    local mobs = raidMobsNear(origin, RAID_KILL_RADIUS)
-                    local killed = 0
-                    for _, entry in ipairs(mobs) do
-                        local hum = entry.hum
-                        if hum and hum.Parent and hum.Health > 0 then
-                            pcall(function() hum.Health = 0 end)
-                            killed = killed + 1
-                        end
+                -- mata todos os inimigos vivos da raid (não só os do raio da ilha),
+                -- senão um mob longe trava a onda e o hub fica pulando de ilha
+                local mobs = raidMobsNear(origin, math.huge)
+                local killed = 0
+                for _, entry in ipairs(mobs) do
+                    local hum = entry.hum
+                    if hum and hum.Parent and hum.Health > 0 then
+                        pcall(function() hum.Health = 0 end)
+                        killed = killed + 1
                     end
+                end
 
-                    if #mobs > 0 then
+                if #mobs > 0 then
+                    State.raidClearSince = nil
+                    local extra = simOk and "" or " (sem SimulationRadius)"
+                    setRaidStatus("Raid: ilha " .. tostring(idx) .. " - " .. killed .. " mobs mortos" .. extra)
+                else
+                    State.raidClearSince = State.raidClearSince or os.clock()
+                    local waited = os.clock() - State.raidClearSince
+                    if waited >= RAID_WAVE_GRACE and idx < 5 then
+                        State.raidIsland = idx + 1
                         State.raidClearSince = nil
-                        setRaidStatus("Raid: ilha " .. tostring(idx) .. " - " .. killed .. " mobs mortos")
+                        setRaidStatus("Raid: ilha " .. tostring(State.raidIsland) .. " (avançando)")
+                    elseif idx >= 5 then
+                        setRaidStatus("Raid: ilha 5 - esperando o boss/onda")
                     else
-                        State.raidClearSince = State.raidClearSince or os.clock()
-                        local waited = os.clock() - State.raidClearSince
-                        if waited >= RAID_WAVE_GRACE and idx < 5 then
-                            State.raidIsland = idx + 1
-                            State.raidClearSince = nil
-                            setRaidStatus("Raid: ilha " .. tostring(State.raidIsland) .. " (avançando)")
-                        elseif idx >= 5 then
-                            setRaidStatus("Raid: ilha 5 - esperando o boss/onda")
-                        else
-                            setRaidStatus("Raid: ilha " .. tostring(idx) .. " - esperando mobs")
-                        end
+                        setRaidStatus("Raid: ilha " .. tostring(idx) .. " - esperando mobs")
                     end
                 end
             else
@@ -2181,33 +2263,39 @@ local function raidLoop()
                 State.raidClearSince = nil
 
                 local now = os.clock()
-                if now - State.raidLastStart >= 6 then
+                local entryCooldown = State.raidEntryAt and (now - State.raidEntryAt < 8)
+                if not entryCooldown and now - State.raidLastStart >= 6 then
                     State.raidLastStart = now
 
-                    local chip = findRaidChip()
-                    if not chip then
-                        fireRemote("CommF_", "RaidsNpc", "Select", State.raidElement)
-                        task.wait(0.8)
-                        chip = findRaidChip()
-                    end
-
-                    if not chip then
-                        setRaidStatus("Raid: sem Microchip (compre no RaidsNpc)", true)
-                    elseif not equipRaidChip() then
-                        setRaidStatus("Raid: não consegui equipar o chip", true)
+                    if not CURRENT_SEA or CURRENT_SEA == 1 then
+                        setRaidStatus("Raid: disponível só no 2º e 3º mar", true)
                     else
-                        local loc = RAID_LOCATIONS[CURRENT_SEA]
-                        if not loc then
-                            setRaidStatus("Raid: disponível só no 2º e 3º mar", true)
+                        local chip = findRaidChip()
+                        if not chip then
+                            fireRemote("CommF_", "RaidsNpc", "Select", State.raidElement)
+                            task.wait(0.8)
+                            chip = findRaidChip()
+                        end
+
+                        if not chip then
+                            setRaidStatus("Raid: sem Microchip (compre no RaidsNpc)", true)
+                        elseif not equipRaidChip() then
+                            setRaidStatus("Raid: não consegui equipar o chip", true)
                         else
-                            teleport(loc.tube + Vector3.new(0, 3, 0), nil, true, function()
-                                return not State.autoRaid
-                            end)
-                            task.wait(1.2)
-                            equipRaidChip()
-                            raidTriggerAround(loc.button, 60)
-                            setRaidStatus("Raid: entrando (chip " .. State.raidElement .. ")")
-                            task.wait(2.5)
+                            local part, prompt, click = findRaidButton()
+                            local pos = raidButtonPos(part, prompt, click)
+                            if not pos then
+                                setRaidStatus("Raid: botão da raid não encontrado no mapa", true)
+                            else
+                                raidSnapTo(pos + Vector3.new(0, 4, 0))
+                                equipRaidChip()
+                                if not triggerRaidButton(part, prompt, click) then
+                                    raidTriggerAround(pos, 80)
+                                end
+                                setRaidStatus("Raid: entrando (chip " .. State.raidElement .. ")")
+                                State.raidEntryAt = os.clock()
+                                task.wait(2.5)
+                            end
                         end
                     end
                 end
@@ -2647,7 +2735,15 @@ local function stopFly()
     end
     local hrp = getHRP()
     local hum = getHum()
-    if hrp then pcall(function() hrp.Anchored = false end) end
+    if hrp then
+        -- remove qualquer BodyVelocity de fly que tenha sobrado (ex.: após respawn)
+        for _, v in ipairs(hrp:GetChildren()) do
+            if v:IsA("BodyVelocity") and (v.Name == "HubFly" or v.Name == "PrismaFly") then
+                pcall(function() v:Destroy() end)
+            end
+        end
+        pcall(function() hrp.Anchored = false end)
+    end
     if hum then pcall(function() hum.PlatformStand = false end) end
 end
 
@@ -4200,13 +4296,10 @@ UI.toggles.autoRaid = makeToggle(raidTab, "Auto Raid", false, function(on)
             UI.toggles.autoQuest.set(false)
         end
         -- fly usa BodyVelocity e brigaria com o hover da raid
-        if State.fly then
-            if UI.toggles.fly and UI.toggles.fly.get() then
-                UI.toggles.fly.set(false)
-            else
-                stopFly()
-            end
+        if UI.toggles.fly and UI.toggles.fly.get() then
+            UI.toggles.fly.set(false)
         end
+        stopFly()
         if UI.toggles.instantFarm and not UI.toggles.instantFarm.get() then
             UI.toggles.instantFarm.set(true)
         else
@@ -4214,6 +4307,7 @@ UI.toggles.autoRaid = makeToggle(raidTab, "Auto Raid", false, function(on)
             forceSimulationRadius()
         end
         State.raidLastStart = 0
+        State.raidEntryAt = nil
         State.raidIsland = nil
         State.raidClearSince = nil
         setupRaidListener()
@@ -4222,6 +4316,7 @@ UI.toggles.autoRaid = makeToggle(raidTab, "Auto Raid", false, function(on)
     else
         State.raidInRaid = false
         State.raidIsland = nil
+        State.raidEntryAt = nil
         State.raidClearSince = nil
         raidStopHover()
         setRaidStatus("Auto Raid desligado")

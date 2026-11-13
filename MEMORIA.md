@@ -177,14 +177,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
 | Arquivo | O que é |
 |---|---|
 | `MEMORIA.md` | Este documento. Ler antes de abrir código. |
-| `hub.lua` | Prisma Hub 1.9.3 (arquivo único). |
+| `hub.lua` | Prisma Hub 1.9.4 (arquivo único). |
 | `teste.lua` | Teste mínimo de GUI (quadrado azul "GUI OK"). |
 
 ## 8. Estado atual
 
 - Planejamento: **completo** (este arquivo).
-- Código: **Fase 1.9.3** em `hub.lua`.
-- Versão atual: `1.9.3` (Prisma Hub).
+- Código: **Fase 1.9.4** em `hub.lua`.
+- Versão atual: `1.9.4` (Prisma Hub).
 
 ### Mudanças da 1.4 (pacote "Tudo" inspirado em hubs públicos)
 - **Renomeado para Prisma Hub** (`CONFIG.name`, título da janela, botão de reabrir "P").
@@ -542,4 +542,22 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   - Comparação de nomes ignora espaços/maiúsculas (`BlackLeg` = `Black Leg`).
   - Helpers de estilo foram movidos para a tabela `UI` para não estourar o
     limite de 200 registradores no `-O0`.
+  - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).
+- **Correção do Auto Raid "voando sem rumo" (1.9.4)**:
+  - Removidas as coordenadas fixas do tubo/botão da raid. Agora o hub procura
+    o botão real em `Workspace.Map` (`RaidSummon2`/`RaidSummon` → `Button.Main`)
+    e dispara o `ProximityPrompt`/`ClickDetector` de perto. Se não achar, mostra
+    erro no status em vez de voar para uma coordenada antiga.
+  - O hover da raid agora **teleporta para o ponto antes** de prender o
+    `BodyPosition`. Antes o BodyPosition puxava o personagem de milhares de
+    studs e ele saía voando/overshooting.
+  - Hover valida que a ilha é uma `BasePart` (ou pega o `PrimaryPart`) e
+    `raidCurrentIsland` usa a mesma função.
+  - O Auto Raid mata **todos** os inimigos vivos da raid, não só os que estão
+    no raio de 450 studs, evitando onda travada por mob distante.
+  - Mesmo sem `sethiddenproperty`, o hub tenta zerar a vida (antes ele nem
+    tentava matar).
+  - `stopFly` remove `BodyVelocity` de fly que tenha sobrado no personagem.
+  - Adicionados os PlaceIds novos do jogo (85211729168715, 79091703265657,
+    100117331123089) para detectar o mar corretamente.
   - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).
