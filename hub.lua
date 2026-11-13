@@ -1,5 +1,5 @@
 --[[
-    Prisma Hub - 1.9.8
+    Prisma Hub - 1.9.9
     Arquivo único. PC. Sem key. Anti-detecção básica.
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
@@ -49,7 +49,7 @@ local bootOk, bootErr = pcall(function()
 --==================== CONFIG ====================
 local CONFIG = {
     name = "Prisma Hub",
-    version = "1.9.8",
+    version = "1.9.9",
 
     jitter = 0.30,
     maxErrors = 3,
@@ -2119,6 +2119,49 @@ local function raidMobsNear(origin, radius)
     return list
 end
 
+-- Diagnóstico: mostra no console onde estão os mobs e as ilhas da raid.
+-- Serve para descobrir se a raid coloca os inimigos fora de Workspace.Enemies.
+UI.raidDump = function()
+    local hrp = getHRP()
+    local here = hrp and hrp.Position
+    local found, scanned = {}, 0
+
+    pcall(function()
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            scanned = scanned + 1
+            if obj:IsA("Model") then
+                local hum = obj:FindFirstChildOfClass("Humanoid")
+                local mhrp = obj:FindFirstChild("HumanoidRootPart")
+                if hum and mhrp and not Players:GetPlayerFromCharacter(obj) then
+                    local d = here and math.floor((mhrp.Position - here).Magnitude) or -1
+                    table.insert(found, obj.Name .. " " .. d .. "m hp" .. math.floor(hum.Health) ..
+                        " pai=" .. tostring(obj.Parent and obj.Parent.Name))
+                    if #found >= 15 then break end
+                end
+            end
+        end
+    end)
+
+    UI.raidLog("dump: " .. tostring(scanned) .. " objetos | " ..
+        (#found > 0 and table.concat(found, " | ") or "NENHUM mob com Humanoid"))
+
+    for i = 1, 5 do
+        local p = raidIslandPart(i)
+        local txt = "nil"
+        if p and here then
+            txt = p:GetFullName() .. " " .. math.floor((p.Position - here).Magnitude) .. "m"
+        elseif p then
+            txt = p:GetFullName()
+        end
+        UI.raidLog("dump: ilha " .. i .. " -> " .. txt)
+    end
+
+    if here then
+        UI.raidLog("dump: player em " .. math.floor(here.X) .. ", " ..
+            math.floor(here.Y) .. ", " .. math.floor(here.Z))
+    end
+end
+
 local function setRaidStatus(text, isError)
     State.raidStatus = text
     if UI.raidStatusLabel then UI.raidStatusLabel.Text = "Status: " .. text end
@@ -2139,6 +2182,10 @@ local function setupRaidListener()
             State.raidIsland = raidCurrentIsland() or 1
             State.raidClearSince = nil
             setRaidStatus("Raid iniciada")
+            task.spawn(function()
+                task.wait(4)
+                if State.raidInRaid then UI.raidDump() end
+            end)
         elseif kind == "Finished" then
             State.raidInRaid = false
             State.raidIsland = nil
@@ -2325,6 +2372,13 @@ local function raidLoop()
                 else
                     State.raidClearSince = State.raidClearSince or os.clock()
                     local waited = os.clock() - State.raidClearSince
+                    if waited > 9 and (os.clock() - (State.raidIdleAt or 0)) > 10 then
+                        State.raidIdleAt = os.clock()
+                        local hrp2 = getHRP()
+                        UI.raidLog("ilha " .. tostring(idx) .. " sem mobs | Enemies=" .. #collectEnemies() ..
+                            (hrp2 and (" | player " .. math.floor(hrp2.Position.X) .. "," ..
+                                math.floor(hrp2.Position.Z)) or ""))
+                    end
                     if waited >= RAID_WAVE_GRACE and idx < 5 then
                         State.raidIsland = idx + 1
                         State.raidClearSince = nil
@@ -4423,6 +4477,11 @@ makeButton(raidTab, "Checar raid", function()
     end
     local ok, res = pcall(function() return c:InvokeServer("RaidsNpc", "Check") end)
     setStatus("Raid check: " .. tostring(ok and res or "falhou"))
+end)
+
+makeButton(raidTab, "Diagnóstico da raid (console)", function()
+    UI.raidDump()
+    setStatus("Diagnóstico da raid enviado ao console (F9)")
 end)
 
 UI.toggles.autoRaid = makeToggle(raidTab, "Auto Raid", false, function(on)

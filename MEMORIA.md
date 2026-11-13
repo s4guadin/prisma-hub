@@ -177,14 +177,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
 | Arquivo | O que é |
 |---|---|
 | `MEMORIA.md` | Este documento. Ler antes de abrir código. |
-| `hub.lua` | Prisma Hub 1.9.8 (arquivo único). |
+| `hub.lua` | Prisma Hub 1.9.9 (arquivo único). |
 | `teste.lua` | Teste mínimo de GUI (quadrado azul "GUI OK"). |
 
 ## 8. Estado atual
 
 - Planejamento: **completo** (este arquivo).
-- Código: **Fase 1.9.8** em `hub.lua`.
-- Versão atual: `1.9.8` (Prisma Hub).
+- Código: **Fase 1.9.9** em `hub.lua`.
+- Versão atual: `1.9.9` (Prisma Hub).
 
 ### Mudanças da 1.4 (pacote "Tudo" inspirado em hubs públicos)
 - **Renomeado para Prisma Hub** (`CONFIG.name`, título da janela, botão de reabrir "P").
@@ -615,4 +615,19 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   - `RAID_WAVE_GRACE` caiu de 8 s para **5 s** (avança mais rápido entre ilhas).
   - `SetNetworkOwner` só é chamado quando o mob ainda não é do cliente, e o
     `SimulationRadius` não é re-tentado a cada mob (cache de 2 s).
+  - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).
+- **Diagnóstico da raid (1.9.9)** — descoberta no console do usuário:
+  - Print de 1.9.7 mostrou `StartTimer` às 22:44:30 e `Finished` às 22:52:10
+    (~7min40, o timer inteiro) e **nenhuma** linha `ilha X: N mortos`: a raid
+    rodou inteira com **zero inimigos detectados**, por isso não completou e não
+    deu recompensa.
+  - Novo `UI.raidDump()`: varre `Workspace` e lista até 15 mobs com `Humanoid`
+    (nome, distância, HP, pasta pai) e o caminho/distância das ilhas 1..5.
+    Roda sozinho 4 s depois do `StartTimer` e no botão
+    **"Diagnóstico da raid (console)"**.
+  - Toda vez que a ilha fica 10 s sem mobs, loga
+    `ilha X sem mobs | Enemies=N | player X,Z`.
+  - Próximo passo depende do dump: se os mobs estão fora de `Workspace.Enemies`,
+    o `raidMobsNear` precisa do caminho certo; se as ilhas 1..5 estão a
+    milhares de studs, o hover está levando o player para fora da arena.
   - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).
