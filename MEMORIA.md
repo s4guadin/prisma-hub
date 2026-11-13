@@ -177,14 +177,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
 | Arquivo | O que é |
 |---|---|
 | `MEMORIA.md` | Este documento. Ler antes de abrir código. |
-| `hub.lua` | Prisma Hub 1.9.5 (arquivo único). |
+| `hub.lua` | Prisma Hub 1.9.6 (arquivo único). |
 | `teste.lua` | Teste mínimo de GUI (quadrado azul "GUI OK"). |
 
 ## 8. Estado atual
 
 - Planejamento: **completo** (este arquivo).
-- Código: **Fase 1.9.5** em `hub.lua`.
-- Versão atual: `1.9.5` (Prisma Hub).
+- Código: **Fase 1.9.6** em `hub.lua`.
+- Versão atual: `1.9.6` (Prisma Hub).
 
 ### Mudanças da 1.4 (pacote "Tudo" inspirado em hubs públicos)
 - **Renomeado para Prisma Hub** (`CONFIG.name`, título da janela, botão de reabrir "P").
@@ -575,4 +575,19 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
     não matar mobs do mapa normal (ex.: evento de Halloween).
   - `UI.raidLog` ficou na tabela `UI` para não estourar os 200 registradores
     do `-O0`.
+  - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).
+- **Morte instantânea mais forte, mobs teimosos da raid (1.9.6)**:
+  - Novo `UI.hardKill(mob, force)`, usado por Farm instantâneo, Kill Aura e
+    Auto Raid. Ordem: `SimulationRadius` → **`HumanoidRootPart:SetNetworkOwner(LP)`**
+    (o cliente só mata o que simula) → `Humanoid.Health = 0` →
+    `RE/RegisterAttack` + `RE/RegisterHit` → `Humanoid.MaxHealth = 0`.
+  - Antes a morte instantânea desistia quando o executor não tinha
+    `sethiddenproperty`; agora sempre tenta matar e usa os fallbacks.
+  - `raidMobsNear` agora também varre os filhos de `Workspace`: algumas raids
+    colocam mobs fora de `Workspace.Enemies`. Jogadores, NPCs, lojas e spawns
+    são ignorados.
+  - Auto Raid mostra no console quais mobs **resistiram**:
+    `[Prisma] raid: ilha 3: 8 mortos | resistiram: Raider, Boss`.
+  - `installHitIdCapture` é chamado ao ligar o Auto Raid (hitId válido para o
+    `RegisterHit`).
   - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).

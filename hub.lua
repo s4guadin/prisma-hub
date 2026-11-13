@@ -1,5 +1,5 @@
 --[[
-    Prisma Hub - 1.9.5
+    Prisma Hub - 1.9.6
     Arquivo único. PC. Sem key. Anti-detecção básica.
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
@@ -49,7 +49,7 @@ local bootOk, bootErr = pcall(function()
 --==================== CONFIG ====================
 local CONFIG = {
     name = "Prisma Hub",
-    version = "1.9.5",
+    version = "1.9.6",
 
     jitter = 0.30,
     maxErrors = 3,
@@ -905,20 +905,11 @@ local function boostTarget(mob)
 end
 
 -- mata o alvo na hora (mesmo método do Kill Aura instantâneo)
+-- delega para UI.hardKill (definido mais abaixo), que tenta dono de rede,
+-- remotes de hit e MaxHealth quando o Health = 0 sozinho não pega.
 local function instantKillMob(mob)
     if not mob or not mob.Parent then return false end
-    local hum = mob:FindFirstChildOfClass("Humanoid")
-    if not hum or hum.Health <= 0 then return false end
-
-    forceSimulationRadius()
-    if not AURA.simOk then return false end
-
-    pcall(function()
-        if hum.Parent and hum.Health > 0 then
-            hum.Health = 0
-        end
-    end)
-    return true
+    return UI.hardKill(mob, true)
 end
 
 -- teleporta até o inimigo (se preciso), para a velocidade e ataca
@@ -2088,11 +2079,23 @@ local function raidCurrentIsland()
     return bestIdx
 end
 
--- mobs vivos ao redor de um ponto, ordenados por distância
+-- mobs vivos ao redor de um ponto, ordenados por distância.
+-- Além de Workspace.Enemies, varre os filhos de Workspace: algumas raids
+-- colocam os mobs fora da pasta Enemies (é por isso que "alguns não morriam").
 local function raidMobsNear(origin, radius)
     local list = {}
     if not origin then return list end
-    for _, mob in ipairs(collectEnemies()) do
+    local seen = {}
+
+    local function consider(mob)
+        if not mob or seen[mob] then return end
+        seen[mob] = true
+        if Players:GetPlayerFromCharacter(mob) then return end
+        local nm = string.lower(tostring(mob.Name))
+        if string.find(nm, "npc", 1, true) or string.find(nm, "shop", 1, true)
+            or string.find(nm, "quest", 1, true) or string.find(nm, "spawn", 1, true) then
+            return
+        end
         local mhrp = mob:FindFirstChild("HumanoidRootPart")
         local hum = mob:FindFirstChildOfClass("Humanoid")
         if mhrp and hum and hum.Health > 0 then
@@ -2102,6 +2105,12 @@ local function raidMobsNear(origin, radius)
             end
         end
     end
+
+    for _, mob in ipairs(collectEnemies()) do consider(mob) end
+    for _, obj in ipairs(Workspace:GetChildren()) do
+        if obj ~= LP.Character and obj:IsA("Model") then consider(obj) end
+    end
+
     table.sort(list, function(a, b) return a.dist < b.dist end)
     return list
 end
@@ -2262,11 +2271,12 @@ local function raidLoop()
                 -- ilha), senão um mob longe trava a onda e o hub fica pulando de ilha
                 local mobs = raidMobsNear(origin, RAID_KILL_RADIUS)
                 local killed = 0
+                local stubborn = nil
                 for _, entry in ipairs(mobs) do
-                    local hum = entry.hum
-                    if hum and hum.Parent and hum.Health > 0 then
-                        pcall(function() hum.Health = 0 end)
+                    if UI.hardKill(entry.mob, true) then
                         killed = killed + 1
+                    else
+                        stubborn = (stubborn and (stubborn .. ", ") or "") .. entry.mob.Name
                     end
                 end
 
@@ -2274,7 +2284,8 @@ local function raidLoop()
                     State.raidClearSince = nil
                     local extra = simOk and "" or " (sem SimulationRadius)"
                     setRaidStatus("Raid: ilha " .. tostring(idx) .. " - " .. killed .. " mobs mortos" .. extra)
-                    UI.raidLog("ilha " .. tostring(idx) .. ": " .. killed .. " mobs mortos" .. extra)
+                    UI.raidLog("ilha " .. tostring(idx) .. ": " .. killed .. " mortos" ..
+                        (stubborn and (" | resistiram: " .. stubborn) or "") .. extra)
                 else
                     State.raidClearSince = State.raidClearSince or os.clock()
                     local waited = os.clock() - State.raidClearSince
@@ -2416,6 +2427,53 @@ function forceSimulationRadius()
     return okAny
 end
 
+-- Mata um mob de verdade, inclusive os teimosos (raid/boss).
+-- Ordem: SimulationRadius -> dono de rede -> Health = 0 -> remotes de hit ->
+-- MaxHealth = 0. Retorna true se o Humanoid ficou com vida 0.
+UI.hardKill = function(mob, force)
+    if not mob or not mob.Parent then return false end
+    local hum = mob:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return true end
+
+    local hrp = mob:FindFirstChild("HumanoidRootPart")
+    local head = mob:FindFirstChild("Head") or hrp
+
+    if not AURA.simOk then forceSimulationRadius() end
+
+    -- o cliente só consegue matar o que simula: pede o dono de rede do mob
+    if hrp then
+        pcall(function()
+            if not hrp.Anchored then hrp:SetNetworkOwner(LP) end
+        end)
+    end
+
+    pcall(function() hum.Health = 0 end)
+    if hum.Health <= 0 then return true end
+
+    -- reforço: remotes de hit (dano de arma) direto no mob
+    local attack, hit = getNetRemotes()
+    if attack and hit and head then
+        AURA.combo = (AURA.combo % 4) + 1
+        pcall(function() attack:FireServer(0.4, AURA.combo) end)
+        for _ = 1, 3 do
+            pcall(function()
+                if AURA.hitId ~= nil then
+                    hit:FireServer(head, {}, nil, AURA.hitId)
+                else
+                    hit:FireServer(head, { { mob, head } })
+                end
+            end)
+        end
+    end
+
+    if hum.Health > 0 and force then
+        pcall(function() hum.MaxHealth = 0 end)
+        pcall(function() hum.Health = 0 end)
+    end
+
+    return hum.Health <= 0
+end
+
 -- Captura um hitId válido que o próprio jogo manda ao atacar (anti-cheat novo).
 local function installHitIdCapture()
     if AURA.hooked then return end
@@ -2518,15 +2576,9 @@ local function killAuraLoop()
             end
 
             if #targets > 0 then
-                -- MÉTODO DOS HUBS PÚBLICOS: mata direto pelo Humanoid
-                if AURA.simOk then
-                    for _, t in ipairs(targets) do
-                        pcall(function()
-                            if t.hum and t.hum.Parent and t.hum.Health > 0 then
-                                t.hum.Health = 0
-                            end
-                        end)
-                    end
+                -- mata direto no Humanoid, pedindo o dono de rede quando preciso
+                for _, t in ipairs(targets) do
+                    pcall(function() UI.hardKill(t.mob, false) end)
                 end
 
                 -- reforço: remotes de hit (dano de arma em todos de uma vez)
@@ -4349,6 +4401,7 @@ UI.toggles.autoRaid = makeToggle(raidTab, "Auto Raid", false, function(on)
         State.raidIsland = nil
         State.raidClearSince = nil
         setupRaidListener()
+        pcall(installHitIdCapture)
         task.spawn(raidLoop)
         setRaidStatus("Auto Raid ligado (chip " .. State.raidElement .. ")")
         UI.raidLog("ligado | mar=" .. tostring(CURRENT_SEA) .. " place=" .. tostring(game.PlaceId))
