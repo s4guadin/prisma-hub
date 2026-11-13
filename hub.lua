@@ -1,5 +1,5 @@
 --[[
-    Prisma Hub - 1.9.6
+    Prisma Hub - 1.9.7
     Arquivo único. PC. Sem key. Anti-detecção básica.
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
@@ -49,7 +49,7 @@ local bootOk, bootErr = pcall(function()
 --==================== CONFIG ====================
 local CONFIG = {
     name = "Prisma Hub",
-    version = "1.9.6",
+    version = "1.9.7",
 
     jitter = 0.30,
     maxErrors = 3,
@@ -240,6 +240,9 @@ local State = {
     raidConn = nil,
     raidLastStart = 0,
     raidEntryAt = nil,
+    raidReached = nil,
+    raidBossSeen = nil,
+    raidCooldownUntil = nil,
     raidRunning = false,
     raidNoTimerSince = nil,
     raidIsland = nil,
@@ -1877,8 +1880,8 @@ end
 -- na hora tudo o que aparece no raio — sem precisar atacar.
 
 local RAID_HOVER_HEIGHT = 55   -- studs acima do centro da ilha
-local RAID_KILL_RADIUS = 2500 -- raio de morte ao redor do centro da ilha
-local RAID_WAVE_GRACE = 6      -- segundos sem mobs antes de ir para a próxima ilha
+local RAID_KILL_RADIUS = 900   -- raio de morte ao redor do centro da ilha (só a ilha atual)
+local RAID_WAVE_GRACE = 8      -- segundos sem mobs antes de ir para a próxima ilha
 
 local function isRaidChip(t)
     if not t or not t:IsA("Tool") then return false end
@@ -2128,8 +2131,10 @@ local function setupRaidListener()
     if not raids then return end
 
     State.raidConn = raids.OnClientEvent:Connect(function(kind)
+        UI.raidLog("evento do jogo: Raids -> " .. tostring(kind))
         if kind == "StartTimer" then
             State.raidInRaid = true
+            State.raidCooldownUntil = nil
             State.raidIsland = raidCurrentIsland() or 1
             State.raidClearSince = nil
             setRaidStatus("Raid iniciada")
@@ -2237,11 +2242,18 @@ local function raidLoop()
             elseif State.raidInRaid then
                 State.raidNoTimerSince = State.raidNoTimerSince or os.clock()
                 if os.clock() - State.raidNoTimerSince > 12 then
+                    local reached = State.raidReached or 1
                     State.raidInRaid = false
                     State.raidNoTimerSince = nil
                     State.raidIsland = nil
                     State.raidClearSince = nil
+                    State.raidReached = nil
                     raidStopHover()
+                    -- dá tempo para a recompensa/notificação da raid aparecer
+                    -- antes de comprar outro chip e entrar de novo
+                    State.raidCooldownUntil = os.clock() + 25
+                    UI.raidLog("raid encerrada na ilha " .. tostring(reached) .. "/5" ..
+                        (reached < 5 and " -> provavelmente FALHOU (sem recompensa)" or " -> completa"))
                 end
             end
 
@@ -2256,6 +2268,7 @@ local function raidLoop()
                     island = raidIslandPart(1)
                 end
                 State.raidIsland = idx
+                State.raidReached = math.max(State.raidReached or 1, idx)
 
                 local origin = island and island.Position or (getHRP() and getHRP().Position)
                 if island then
@@ -2267,20 +2280,36 @@ local function raidLoop()
                 -- cliente passa a simular os mobs; a morte zera a vida e replica
                 local simOk = forceSimulationRadius()
 
-                -- mata todos os inimigos vivos da raid (não só os do raio curto da
-                -- ilha), senão um mob longe trava a onda e o hub fica pulando de ilha
+                -- mata todos os inimigos vivos DA ILHA ATUAL (raio curto): matar
+                -- mobs de ilhas futuras fazia o servidor não creditar a raid
                 local mobs = raidMobsNear(origin, RAID_KILL_RADIUS)
+
+                -- na última ilha (boss), espera o boss nascer de verdade antes de
+                -- matar; matar no mesmo frame do spawn fazia a raid terminar sem
+                -- recompensa
+                local waitBoss = false
+                if idx >= 5 and #mobs > 0 then
+                    State.raidBossSeen = State.raidBossSeen or os.clock()
+                    waitBoss = (os.clock() - State.raidBossSeen) < 1.5
+                else
+                    State.raidBossSeen = nil
+                end
+
                 local killed = 0
                 local stubborn = nil
-                for _, entry in ipairs(mobs) do
-                    if UI.hardKill(entry.mob, true) then
-                        killed = killed + 1
-                    else
-                        stubborn = (stubborn and (stubborn .. ", ") or "") .. entry.mob.Name
+                if not waitBoss then
+                    for _, entry in ipairs(mobs) do
+                        if UI.hardKill(entry.mob, true) then
+                            killed = killed + 1
+                        else
+                            stubborn = (stubborn and (stubborn .. ", ") or "") .. entry.mob.Name
+                        end
                     end
                 end
 
-                if #mobs > 0 then
+                if waitBoss then
+                    setRaidStatus("Raid: ilha " .. tostring(idx) .. " - aguardando o boss nascer")
+                elseif #mobs > 0 then
                     State.raidClearSince = nil
                     local extra = simOk and "" or " (sem SimulationRadius)"
                     setRaidStatus("Raid: ilha " .. tostring(idx) .. " - " .. killed .. " mobs mortos" .. extra)
@@ -2306,7 +2335,11 @@ local function raidLoop()
 
                 local now = os.clock()
                 local entryCooldown = State.raidEntryAt and (now - State.raidEntryAt < 8)
-                if not entryCooldown and now - State.raidLastStart >= 6 then
+                local waitingReward = State.raidCooldownUntil and now < State.raidCooldownUntil
+                if waitingReward then
+                    setRaidStatus("Raid: fim da raid - aguardando recompensa (" ..
+                        math.ceil(State.raidCooldownUntil - now) .. "s)")
+                elseif not entryCooldown and now - State.raidLastStart >= 6 then
                     State.raidLastStart = now
 
                     if not CURRENT_SEA or CURRENT_SEA == 1 then
@@ -4400,6 +4433,9 @@ UI.toggles.autoRaid = makeToggle(raidTab, "Auto Raid", false, function(on)
         State.raidEntryAt = nil
         State.raidIsland = nil
         State.raidClearSince = nil
+        State.raidReached = nil
+        State.raidBossSeen = nil
+        State.raidCooldownUntil = nil
         setupRaidListener()
         pcall(installHitIdCapture)
         task.spawn(raidLoop)
@@ -4410,6 +4446,9 @@ UI.toggles.autoRaid = makeToggle(raidTab, "Auto Raid", false, function(on)
         State.raidIsland = nil
         State.raidEntryAt = nil
         State.raidClearSince = nil
+        State.raidReached = nil
+        State.raidBossSeen = nil
+        State.raidCooldownUntil = nil
         raidStopHover()
         setRaidStatus("Auto Raid desligado")
     end

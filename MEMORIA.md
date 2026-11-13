@@ -177,14 +177,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
 | Arquivo | O que é |
 |---|---|
 | `MEMORIA.md` | Este documento. Ler antes de abrir código. |
-| `hub.lua` | Prisma Hub 1.9.6 (arquivo único). |
+| `hub.lua` | Prisma Hub 1.9.7 (arquivo único). |
 | `teste.lua` | Teste mínimo de GUI (quadrado azul "GUI OK"). |
 
 ## 8. Estado atual
 
 - Planejamento: **completo** (este arquivo).
-- Código: **Fase 1.9.6** em `hub.lua`.
-- Versão atual: `1.9.6` (Prisma Hub).
+- Código: **Fase 1.9.7** em `hub.lua`.
+- Versão atual: `1.9.7` (Prisma Hub).
 
 ### Mudanças da 1.4 (pacote "Tudo" inspirado em hubs públicos)
 - **Renomeado para Prisma Hub** (`CONFIG.name`, título da janela, botão de reabrir "P").
@@ -590,4 +590,18 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
     `[Prisma] raid: ilha 3: 8 mortos | resistiram: Raider, Boss`.
   - `installHitIdCapture` é chamado ao ligar o Auto Raid (hitId válido para o
     `RegisterHit`).
+  - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).
+- **Raid terminando sem recompensa (1.9.7)**:
+  - Raio de morte da raid reduzido para **900 studs** (só a ilha atual): matar
+    mobs de ilhas futuras fazia o servidor **não creditar** a raid.
+  - Na ilha 5 (boss) o hub espera **1.5 s** o boss nascer antes de matar; matar
+    no mesmo frame do spawn encerrava a raid sem recompensa.
+  - Depois que a raid acaba, o hub espera **25 s** (`raidCooldownUntil`) antes
+    de comprar outro chip e entrar de novo, para a notificação/recompensa
+    aparecer.
+  - `Raids.OnClientEvent` agora loga todos os eventos do jogo
+    (`[Prisma] raid: evento do jogo: Raids -> ...`) e o hub registra em que
+    ilha a raid terminou (`raid encerrada na ilha X/5`), o que mostra se a raid
+    falhou (X < 5) ou completou.
+  - `RAID_WAVE_GRACE` subiu para 8 s.
   - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).
