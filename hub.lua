@@ -1,5 +1,5 @@
 --[[
-    Prisma Hub - 1.9.7
+    Prisma Hub - 1.9.8
     Arquivo único. PC. Sem key. Anti-detecção básica.
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
@@ -49,7 +49,7 @@ local bootOk, bootErr = pcall(function()
 --==================== CONFIG ====================
 local CONFIG = {
     name = "Prisma Hub",
-    version = "1.9.7",
+    version = "1.9.8",
 
     jitter = 0.30,
     maxErrors = 3,
@@ -243,6 +243,7 @@ local State = {
     raidReached = nil,
     raidBossSeen = nil,
     raidCooldownUntil = nil,
+    raidBusy = false,
     raidRunning = false,
     raidNoTimerSince = nil,
     raidIsland = nil,
@@ -1881,7 +1882,7 @@ end
 
 local RAID_HOVER_HEIGHT = 55   -- studs acima do centro da ilha
 local RAID_KILL_RADIUS = 900   -- raio de morte ao redor do centro da ilha (só a ilha atual)
-local RAID_WAVE_GRACE = 8      -- segundos sem mobs antes de ir para a próxima ilha
+local RAID_WAVE_GRACE = 5      -- segundos sem mobs antes de ir para a próxima ilha
 
 local function isRaidChip(t)
     if not t or not t:IsA("Tool") then return false end
@@ -2298,14 +2299,20 @@ local function raidLoop()
                 local killed = 0
                 local stubborn = nil
                 if not waitBoss then
+                    -- via rápida em lote: zera a vida de todos de uma vez
                     for _, entry in ipairs(mobs) do
-                        if UI.hardKill(entry.mob, true) then
+                        pcall(function() entry.hum.Health = 0 end)
+                    end
+                    -- só os que sobreviveram entram no fallback (dono de rede/remotes)
+                    for _, entry in ipairs(mobs) do
+                        if entry.hum.Health <= 0 or UI.hardKill(entry.mob, true) then
                             killed = killed + 1
                         else
                             stubborn = (stubborn and (stubborn .. ", ") or "") .. entry.mob.Name
                         end
                     end
                 end
+                State.raidBusy = (#mobs > 0)
 
                 if waitBoss then
                     setRaidStatus("Raid: ilha " .. tostring(idx) .. " - aguardando o boss nascer")
@@ -2330,6 +2337,7 @@ local function raidLoop()
                 end
             else
                 raidStopHover()
+                State.raidBusy = false
                 State.raidIsland = nil
                 State.raidClearSince = nil
 
@@ -2394,7 +2402,7 @@ local function raidLoop()
             clearErrors("raid")
         end
 
-        task.wait(0.5)
+        task.wait(State.raidBusy and 0.2 or 0.5)
     end
     raidStopHover()
     State.raidIsland = nil
@@ -2461,8 +2469,8 @@ function forceSimulationRadius()
 end
 
 -- Mata um mob de verdade, inclusive os teimosos (raid/boss).
--- Ordem: SimulationRadius -> dono de rede -> Health = 0 -> remotes de hit ->
--- MaxHealth = 0. Retorna true se o Humanoid ficou com vida 0.
+-- Via rápida primeiro (Health = 0); só quem sobrevive paga o custo de
+-- dono de rede + remotes + MaxHealth. Assim a maioria morre na hora.
 UI.hardKill = function(mob, force)
     if not mob or not mob.Parent then return false end
     local hum = mob:FindFirstChildOfClass("Humanoid")
@@ -2471,12 +2479,20 @@ UI.hardKill = function(mob, force)
     local hrp = mob:FindFirstChild("HumanoidRootPart")
     local head = mob:FindFirstChild("Head") or hrp
 
-    if not AURA.simOk then forceSimulationRadius() end
+    if not AURA.simOk and (os.clock() - (AURA.lastSimTry or 0)) > 2 then
+        AURA.lastSimTry = os.clock()
+        forceSimulationRadius()
+    end
 
-    -- o cliente só consegue matar o que simula: pede o dono de rede do mob
+    pcall(function() hum.Health = 0 end)
+    if hum.Health <= 0 then return true end
+
+    -- teimoso: o cliente só consegue matar o que simula
     if hrp then
         pcall(function()
-            if not hrp.Anchored then hrp:SetNetworkOwner(LP) end
+            if not hrp.Anchored and hrp:GetNetworkOwner() ~= LP then
+                hrp:SetNetworkOwner(LP)
+            end
         end)
     end
 
@@ -2488,7 +2504,7 @@ UI.hardKill = function(mob, force)
     if attack and hit and head then
         AURA.combo = (AURA.combo % 4) + 1
         pcall(function() attack:FireServer(0.4, AURA.combo) end)
-        for _ = 1, 3 do
+        for _ = 1, 2 do
             pcall(function()
                 if AURA.hitId ~= nil then
                     hit:FireServer(head, {}, nil, AURA.hitId)

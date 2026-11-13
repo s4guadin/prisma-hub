@@ -177,14 +177,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
 | Arquivo | O que é |
 |---|---|
 | `MEMORIA.md` | Este documento. Ler antes de abrir código. |
-| `hub.lua` | Prisma Hub 1.9.7 (arquivo único). |
+| `hub.lua` | Prisma Hub 1.9.8 (arquivo único). |
 | `teste.lua` | Teste mínimo de GUI (quadrado azul "GUI OK"). |
 
 ## 8. Estado atual
 
 - Planejamento: **completo** (este arquivo).
-- Código: **Fase 1.9.7** em `hub.lua`.
-- Versão atual: `1.9.7` (Prisma Hub).
+- Código: **Fase 1.9.8** em `hub.lua`.
+- Versão atual: `1.9.8` (Prisma Hub).
 
 ### Mudanças da 1.4 (pacote "Tudo" inspirado em hubs públicos)
 - **Renomeado para Prisma Hub** (`CONFIG.name`, título da janela, botão de reabrir "P").
@@ -604,4 +604,15 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
     ilha a raid terminou (`raid encerrada na ilha X/5`), o que mostra se a raid
     falhou (X < 5) ou completou.
   - `RAID_WAVE_GRACE` subiu para 8 s.
+  - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).
+- **Morte mais rápida na raid (1.9.8)**:
+  - `UI.hardKill` agora faz a **via rápida primeiro** (`Health = 0`) e só os mobs
+    que sobrevivem pagam o custo de dono de rede + remotes + `MaxHealth`.
+  - Auto Raid zera a vida de todos os mobs da ilha **em lote** e só depois roda o
+    fallback nos sobreviventes.
+  - O loop da raid passou a rodar a cada **0.2 s** enquanto há mobs vivos (antes
+    0.5 s fixo), e volta para 0.5 s quando a ilha está limpa.
+  - `RAID_WAVE_GRACE` caiu de 8 s para **5 s** (avança mais rápido entre ilhas).
+  - `SetNetworkOwner` só é chamado quando o mob ainda não é do cliente, e o
+    `SimulationRadius` não é re-tentado a cada mob (cache de 2 s).
   - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).
