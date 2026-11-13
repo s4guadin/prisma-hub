@@ -1,5 +1,5 @@
 --[[
-    Prisma Hub - 1.9.4
+    Prisma Hub - 1.9.5
     Arquivo único. PC. Sem key. Anti-detecção básica.
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
@@ -49,7 +49,7 @@ local bootOk, bootErr = pcall(function()
 --==================== CONFIG ====================
 local CONFIG = {
     name = "Prisma Hub",
-    version = "1.9.4",
+    version = "1.9.5",
 
     jitter = 0.30,
     maxErrors = 3,
@@ -1886,7 +1886,7 @@ end
 -- na hora tudo o que aparece no raio — sem precisar atacar.
 
 local RAID_HOVER_HEIGHT = 55   -- studs acima do centro da ilha
-local RAID_KILL_RADIUS = 450   -- raio de morte ao redor do centro da ilha
+local RAID_KILL_RADIUS = 2500 -- raio de morte ao redor do centro da ilha
 local RAID_WAVE_GRACE = 6      -- segundos sem mobs antes de ir para a próxima ilha
 
 local function isRaidChip(t)
@@ -1950,11 +1950,16 @@ local function raidTimerVisible()
         local deep = main:FindFirstChild("RaidTimer", true)
         if deep and deep.Visible then return true end
 
+        -- fallback: só aceita algo claramente de raid (nome com "raid" ou
+        -- texto de raid com tempo "12:34"). Texto solto com "raid" dava
+        -- falso positivo e fazia o hub pairar fora da raid.
         if hud then
             for _, d in ipairs(hud:GetDescendants()) do
                 if d:IsA("TextLabel") and d.Visible then
+                    local nm = string.lower(tostring(d.Name or ""))
+                    if string.find(nm, "raid", 1, true) then return true end
                     local txt = string.lower(tostring(d.Text or ""))
-                    if string.find(txt, "raid", 1, true) then
+                    if string.find(txt, "raid", 1, true) and string.find(txt, "%d+:%d%d") then
                         return true
                     end
                 end
@@ -1963,6 +1968,17 @@ local function raidTimerVisible()
         return false
     end)
     return ok and visible == true
+end
+
+-- Log do Auto Raid no console do executor (F9), com anti-spam.
+-- Serve para o usuário ver no console exatamente onde o raid para.
+UI.raidLog = function(msg)
+    local now = os.clock()
+    msg = tostring(msg)
+    if State.raidLogLast == msg and (now - (State.raidLogAt or 0)) < 3 then return end
+    State.raidLogLast = msg
+    State.raidLogAt = now
+    if warn then pcall(warn, "[Prisma] raid: " .. msg) end
 end
 
 -- Coloca o personagem no ponto antes de prender o BodyPosition.
@@ -1987,7 +2003,19 @@ local function raidSetHover(pos)
     local hum = getHum()
     if not hrp or not pos then return false end
 
-    raidSnapTo(pos)
+    local dist = (hrp.Position - pos).Magnitude
+    if dist > 900 then
+        -- Ilha longe: vai em linha reta na velocidade normal do hub (300 studs/s)
+        -- em vez de deixar o BodyPosition puxar o personagem (isso virava voo sem rumo)
+        UI.raidLog("ilha longe (" .. math.floor(dist) .. " studs), indo em linha reta")
+        pcall(function()
+            teleport(pos, nil, true, function() return not State.autoRaid end)
+        end)
+        hrp = getHRP()
+        if not hrp then return false end
+    elseif dist > 60 then
+        raidSnapTo(pos)
+    end
 
     local old = hrp:FindFirstChild("PrismaRaidHover")
     if old and old:IsA("BodyPosition") then
@@ -2221,16 +2249,18 @@ local function raidLoop()
                 State.raidIsland = idx
 
                 local origin = island and island.Position or (getHRP() and getHRP().Position)
-                if origin then
+                if island then
                     raidSetHover(origin + Vector3.new(0, RAID_HOVER_HEIGHT, 0))
+                else
+                    UI.raidLog("marcador da ilha " .. tostring(idx) .. " não encontrado em _WorldOrigin.Locations")
                 end
 
                 -- cliente passa a simular os mobs; a morte zera a vida e replica
                 local simOk = forceSimulationRadius()
 
-                -- mata todos os inimigos vivos da raid (não só os do raio da ilha),
-                -- senão um mob longe trava a onda e o hub fica pulando de ilha
-                local mobs = raidMobsNear(origin, math.huge)
+                -- mata todos os inimigos vivos da raid (não só os do raio curto da
+                -- ilha), senão um mob longe trava a onda e o hub fica pulando de ilha
+                local mobs = raidMobsNear(origin, RAID_KILL_RADIUS)
                 local killed = 0
                 for _, entry in ipairs(mobs) do
                     local hum = entry.hum
@@ -2244,6 +2274,7 @@ local function raidLoop()
                     State.raidClearSince = nil
                     local extra = simOk and "" or " (sem SimulationRadius)"
                     setRaidStatus("Raid: ilha " .. tostring(idx) .. " - " .. killed .. " mobs mortos" .. extra)
+                    UI.raidLog("ilha " .. tostring(idx) .. ": " .. killed .. " mobs mortos" .. extra)
                 else
                     State.raidClearSince = State.raidClearSince or os.clock()
                     local waited = os.clock() - State.raidClearSince
@@ -2269,6 +2300,7 @@ local function raidLoop()
 
                     if not CURRENT_SEA or CURRENT_SEA == 1 then
                         setRaidStatus("Raid: disponível só no 2º e 3º mar", true)
+                        UI.raidLog("mar não reconhecido (PlaceId " .. tostring(game.PlaceId) .. " -> " .. tostring(CURRENT_SEA) .. ")")
                     else
                         local chip = findRaidChip()
                         if not chip then
@@ -2279,17 +2311,22 @@ local function raidLoop()
 
                         if not chip then
                             setRaidStatus("Raid: sem Microchip (compre no RaidsNpc)", true)
+                            UI.raidLog("sem Microchip na mochila")
                         elseif not equipRaidChip() then
                             setRaidStatus("Raid: não consegui equipar o chip", true)
+                            UI.raidLog("não consegui equipar o Microchip")
                         else
                             local part, prompt, click = findRaidButton()
                             local pos = raidButtonPos(part, prompt, click)
                             if not pos then
                                 setRaidStatus("Raid: botão da raid não encontrado no mapa", true)
+                                UI.raidLog("RaidSummon/Button não encontrado em Workspace.Map nem em Workspace")
                             else
+                                UI.raidLog("entrando: botão em " .. tostring(part and part:GetFullName() or prompt or click))
                                 raidSnapTo(pos + Vector3.new(0, 4, 0))
                                 equipRaidChip()
                                 if not triggerRaidButton(part, prompt, click) then
+                                    UI.raidLog("prompt/click não disparou, tentando por proximidade")
                                     raidTriggerAround(pos, 80)
                                 end
                                 setRaidStatus("Raid: entrando (chip " .. State.raidElement .. ")")
@@ -3137,6 +3174,7 @@ local function new(class, props, parent)
 end
 
 warn("[Prisma] iniciando " .. CONFIG.version .. " (parent: " .. tostring(GUI_PARENT and GUI_PARENT:GetFullName() or "nil") .. ")")
+warn("[Prisma] PlaceId=" .. tostring(game.PlaceId) .. " mar=" .. tostring(CURRENT_SEA))
 
 -- remove instâncias antigas do hub para não empilhar GUI ao reexecutar.
 -- Cada Destroy vai em pcall próprio e nunca destrói o próprio parent.
@@ -4313,6 +4351,7 @@ UI.toggles.autoRaid = makeToggle(raidTab, "Auto Raid", false, function(on)
         setupRaidListener()
         task.spawn(raidLoop)
         setRaidStatus("Auto Raid ligado (chip " .. State.raidElement .. ")")
+        UI.raidLog("ligado | mar=" .. tostring(CURRENT_SEA) .. " place=" .. tostring(game.PlaceId))
     else
         State.raidInRaid = false
         State.raidIsland = nil

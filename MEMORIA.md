@@ -177,14 +177,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
 | Arquivo | O que é |
 |---|---|
 | `MEMORIA.md` | Este documento. Ler antes de abrir código. |
-| `hub.lua` | Prisma Hub 1.9.4 (arquivo único). |
+| `hub.lua` | Prisma Hub 1.9.5 (arquivo único). |
 | `teste.lua` | Teste mínimo de GUI (quadrado azul "GUI OK"). |
 
 ## 8. Estado atual
 
 - Planejamento: **completo** (este arquivo).
-- Código: **Fase 1.9.4** em `hub.lua`.
-- Versão atual: `1.9.4` (Prisma Hub).
+- Código: **Fase 1.9.5** em `hub.lua`.
+- Versão atual: `1.9.5` (Prisma Hub).
 
 ### Mudanças da 1.4 (pacote "Tudo" inspirado em hubs públicos)
 - **Renomeado para Prisma Hub** (`CONFIG.name`, título da janela, botão de reabrir "P").
@@ -560,4 +560,19 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
   - `stopFly` remove `BodyVelocity` de fly que tenha sobrado no personagem.
   - Adicionados os PlaceIds novos do jogo (85211729168715, 79091703265657,
     100117331123089) para detectar o mar corretamente.
+  - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).
+- **Diagnóstico do Auto Raid no console (1.9.5)**:
+  - O Auto Raid agora escreve no console (F9) linhas `[Prisma] raid: ...` com
+    anti-spam, mostrando mar/PlaceId, chip, botão encontrado, ilha e mortes.
+    Assim dá para saber exatamente onde ele para sem precisar da UI.
+  - Boot também loga `[Prisma] PlaceId=... mar=...`.
+  - Hover de ilha **muito longe** (>900 studs) não usa mais `BodyPosition` nem
+    CFrame seco: vai em linha reta na velocidade normal do hub (300 studs/s).
+  - `raidTimerVisible` não aceita mais qualquer texto com "raid": o fallback
+    exige nome com "raid" ou texto de raid com tempo (`12:34`), evitando
+    falso positivo que fazia o hub pairar fora da raid.
+  - Raio de morte da raid limitado a 2500 studs (em vez de `math.huge`) para
+    não matar mobs do mapa normal (ex.: evento de Halloween).
+  - `UI.raidLog` ficou na tabela `UI` para não estourar os 200 registradores
+    do `-O0`.
   - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).
