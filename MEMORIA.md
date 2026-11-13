@@ -177,14 +177,14 @@ Não é bypass mágico. Reduz padrões detectáveis:
 | Arquivo | O que é |
 |---|---|
 | `MEMORIA.md` | Este documento. Ler antes de abrir código. |
-| `hub.lua` | Prisma Hub 1.10.0 (arquivo único). |
+| `hub.lua` | Prisma Hub 1.10.1 (arquivo único). |
 | `teste.lua` | Teste mínimo de GUI (quadrado azul "GUI OK"). |
 
 ## 8. Estado atual
 
 - Planejamento: **completo** (este arquivo).
-- Código: **Fase 1.10.0** em `hub.lua`.
-- Versão atual: `1.10.0` (Prisma Hub).
+- Código: **Fase 1.10.1** em `hub.lua`.
+- Versão atual: `1.10.1` (Prisma Hub).
 
 ### Mudanças da 1.4 (pacote "Tudo" inspirado em hubs públicos)
 - **Renomeado para Prisma Hub** (`CONFIG.name`, título da janela, botão de reabrir "P").
@@ -645,4 +645,11 @@ Ficam em `ISLANDS` no topo do `hub.lua`, agrupadas por mar:
     se a ilha nunca teve mobs, só avança depois de 15 s (fallback).
   - Mantidos o dump `UI.raidDump`, o log `ilha X sem mobs | Enemies=N` e o
     cooldown de 25 s pós-raid.
+  - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).
+- **Auto Raid não compra nada (1.10.1)**:
+  - Removido o `RaidsNpc Select` automático (compra de chip) do loop do Auto
+    Raid. Sem Microchip na mochila ele apenas para e avisa:
+    `Raid: sem Microchip na mochila (Auto Raid não compra)`.
+  - O botão **"Comprar chip no NPC (manual)"** continua na aba, mas só compra
+    quando o usuário clica.
   - Validado com `luaparse` e `luau-compile -O0`, `-O1` e `-O2` (exit=0).

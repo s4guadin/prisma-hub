@@ -1,5 +1,5 @@
 --[[
-    Prisma Hub - 1.10.0
+    Prisma Hub - 1.10.1
     Arquivo único. PC. Sem key. Anti-detecção básica.
     Base: listas clicáveis de mobs/bosses/jogadores, teleporte por coordenadas,
     espectar, anti-AFK, kill switch e save/load.
@@ -49,7 +49,7 @@ local bootOk, bootErr = pcall(function()
 --==================== CONFIG ====================
 local CONFIG = {
     name = "Prisma Hub",
-    version = "1.10.0",
+    version = "1.10.1",
 
     jitter = 0.30,
     maxErrors = 3,
@@ -2408,15 +2408,11 @@ local function raidLoop()
                         UI.raidLog("mar não reconhecido (PlaceId " .. tostring(game.PlaceId) .. " -> " .. tostring(CURRENT_SEA) .. ")")
                     else
                         local chip = findRaidChip()
-                        if not chip then
-                            fireRemote("CommF_", "RaidsNpc", "Select", State.raidElement)
-                            task.wait(0.8)
-                            chip = findRaidChip()
-                        end
 
                         if not chip then
-                            setRaidStatus("Raid: sem Microchip (compre no RaidsNpc)", true)
-                            UI.raidLog("sem Microchip na mochila")
+                            -- o Auto Raid NÃO compra chip: só usa o que já existe
+                            setRaidStatus("Raid: sem Microchip na mochila (Auto Raid não compra)", true)
+                            UI.raidLog("sem Microchip na mochila (Auto Raid não compra nada)")
                         elseif not equipRaidChip() then
                             setRaidStatus("Raid: não consegui equipar o chip", true)
                             UI.raidLog("não consegui equipar o Microchip")
@@ -4478,7 +4474,7 @@ UI.raidChipBtn = makeButton(raidTab, "Chip: " .. State.raidElement, function()
     setStatus("Chip da raid: " .. State.raidElement)
 end)
 
-makeButton(raidTab, "Comprar chip no NPC", function()
+makeButton(raidTab, "Comprar chip no NPC (manual)", function()
     fireRemote("CommF_", "RaidsNpc", "Select", State.raidElement)
     setStatus("Pedido de chip enviado: " .. State.raidElement)
 end)
@@ -4550,7 +4546,7 @@ UI.toggles.autoRaid = makeToggle(raidTab, "Auto Raid", false, function(on)
     end
 end)
 
-makeLabel(raidTab, "Sem chip, o Auto Raid tenta comprar no RaidsNpc. Funciona no 2º e 3º mar; no 1º mar a raid não existe.", true)
+makeLabel(raidTab, "O Auto Raid NÃO compra nada: ele só usa um Microchip que já esteja na mochila. Sem chip ele para e avisa no status.", true)
 
 makeSection(raidTab, "Awakening")
 
